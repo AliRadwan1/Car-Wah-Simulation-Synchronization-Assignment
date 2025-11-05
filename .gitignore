@@ -24,3 +24,6 @@ hs_err_pid*
 replay_pid*
 
 .vscode/
+lib/
+bin/
+CS241-Assignment2 - Synchronization.pdf
