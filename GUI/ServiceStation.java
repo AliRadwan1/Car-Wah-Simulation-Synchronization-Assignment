@@ -12,18 +12,20 @@
 
 /*
  * Compile command
- * "D:\Downloads\java\openjdk-25+36_windows-x64_bin\jdk-25\bin\javac.exe" "--module-path" "C:\javafx-sdk-25.0.1\lib" "--add-modules" "javafx.controls,javafx.fxml" "ServiceStation.java"
+ * & "D:\Downloads\java\openjdk-25+36_windows-x64_bin\jdk-25\bin\javac.exe" "--module-path" "C:\javafx-sdk-25.0.1\lib" "--add-modules" "javafx.controls,javafx.fxml" "ServiceStation.java"
  * Run Command
- * "D:\Downloads\java\openjdk-25+36_windows-x64_bin\jdk-25\bin\java.exe" "--enable-native-access=javafx.graphics" "--module-path" "C:\javafx-sdk-25.0.1\lib" "--add-modules" "javafx.controls,javafx.fxml" "ServiceStation"
+ * & "D:\Downloads\java\openjdk-25+36_windows-x64_bin\jdk-25\bin\java.exe" "--enable-native-access=javafx.graphics" "--module-path" "C:\javafx-sdk-25.0.1\lib" "--add-modules" "javafx.controls,javafx.fxml" "ServiceStation"
  * 
  */
 
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
+import javafx.animation.FadeTransition;
 import javafx.application.*;
 import javafx.stage.*;
 
@@ -49,19 +51,33 @@ class Car extends Thread
         this.full = full;
     }
 
+    private void checkPaused() {
+        synchronized (gui) {
+            while (gui.isPaused()) {
+                try {
+                    gui.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+    }
+
     public void run()
     {
         try {
-            
-            // gui.log(ID + " arrived");
-            empty.waitS();
-            mutex.waitS();
+            checkPaused();
+            empty.waitS(); // wait until there is space to add car
+            checkPaused();
+            mutex.waitS(); // if the queue (Waiting Area) being in use wait else take mutex
             
             queue.add(ID);
             gui.log(ID + " entered waiting area");
             gui.updateWaitingArea(new ArrayList<>(queue));
             Thread.sleep(1500);
-            
+
+            checkPaused();
             full.signal();
             mutex.signal();
         } 
@@ -92,28 +108,41 @@ class Pump extends Thread
         this.pumps = pumps;
     }
 
+    private void checkPaused() {
+        synchronized (gui) {
+            while (gui.isPaused()) {
+                try {
+                    gui.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+    }
+
     public void run()
     {
         while (true) {
             try 
             {
+                checkPaused();
                 full.waitS();  // wait until there is cars waiting
-                pumps.waitS(); // wait until there is a free pump
-                mutex.waitS(); // if the queue being in use wait else take the mutex
+                pumps.waitS(); // wait until ther is a free pump
+                mutex.waitS(); // if the queue (Waiting Area) being in use wait else take mutex
 
                 String car = queue.poll();
                 gui.log("Pump " + (pumpID + 1) + ": " + car + " begins service");
                 gui.updateWaitingArea(new ArrayList<>(queue));
                 gui.updatePumpStatus(pumpID, car, true);
-                
 
                 mutex.signal(); // let go of mutex so other threads can work on the queue
                 empty.signal(); // signal that there is one more space free in waiting area
 
+                checkPaused();
                 Thread.sleep(5000); // simulate service duration
                 gui.log("Pump " + (pumpID + 1) + ": " + car + " finishes service");
                 gui.updatePumpStatus(pumpID, car, false);
-                
 
                 pumps.signal();
             } 
@@ -162,7 +191,6 @@ class CarWashGUI extends VBox
     private VBox waitingAreaBox;
     private HBox pumpBox;
     private TextArea logArea;
-    private Button startButton;
 
     private List<Label> waitingLabels = new ArrayList<>();
     private List<Label> pumpLabels = new ArrayList<>();
@@ -170,13 +198,17 @@ class CarWashGUI extends VBox
     private int waitingCapacity;
     private int pumpCount;
 
-    // Callback for when "Start Simulation" button is pressed
-    private Runnable onStartClicked;
+    private Button pauseButton;
+    private volatile boolean paused = false;
 
-    public void setOnStartClicked(Runnable action) {
-        this.onStartClicked = action;
+    public boolean isPaused() {
+        return paused;
     }
 
+    public void setPaused(boolean paused) {
+        this.paused = paused;
+    }
+    
     public CarWashGUI(int waitingCapacity, int pumpCount)
     {
         this.waitingCapacity = waitingCapacity;
@@ -187,8 +219,8 @@ class CarWashGUI extends VBox
 
         // ----------- Title
         Label title = new Label("🚗 Car Wash Simulation");
-        title.setFont(Font.font(22));
-        getChildren().add(title);
+        title.setFont(Font.font("Arial", 26));
+        title.setTextFill(Color.DARKBLUE);
 
         // ----------- Waiting Area
         waitingAreaBox = new VBox(5);
@@ -198,7 +230,6 @@ class CarWashGUI extends VBox
         waitLabel.setFont(Font.font(16));
         VBox waitLayout = new VBox(waitLabel, waitingAreaBox);
         waitLayout.setSpacing(5);
-        getChildren().add(waitLayout);
         initWaitingArea();
 
         // ----------- Pumps Section
@@ -209,40 +240,74 @@ class CarWashGUI extends VBox
         pumpLabel.setFont(Font.font(16));
         VBox pumpLayout = new VBox(pumpLabel, pumpBox);
         pumpLayout.setSpacing(5);
-        getChildren().add(pumpLayout);
         initPumps();
 
         // ----------- Log Section
         logArea = new TextArea();
         logArea.setEditable(false);
         logArea.setPrefHeight(200);
-        getChildren().add(logArea);
 
-        // ----------- Start Button
-        startButton = new Button("▶ Start Simulation");
-        startButton.setPrefWidth(200);
-        startButton.setStyle(
+        // ----------- Pause Button
+        pauseButton = new Button("⏸ Pause");
+        pauseButton.setPrefWidth(200);
+        pauseButton.setStyle(
             "-fx-font-size: 14px; " +
-            "-fx-background-color: #2196F3; " +
+            "-fx-background-color: #FF9800; " +
             "-fx-text-fill: white; " +
             "-fx-font-weight: bold; " +
             "-fx-background-radius: 8px;"
         );
-        startButton.setOnAction(e -> {
-            if (onStartClicked != null) {
-                onStartClicked.run();
+        pauseButton.setOnAction(
+            e -> 
+            {
+            if (!paused) 
+            {
+                paused = true;
+                pauseButton.setText("▶ Resume");
+                log("Simulation paused...");
+            } 
+            else 
+            {
+                paused = false;
+                synchronized (this) { notifyAll(); } // wake all waiting threads
+                pauseButton.setText("⏸ Pause");
+                log("Simulation resumed...");
             }
-            startButton.setDisable(true); // prevent double start
-            log("Simulation started...");
         });
-        getChildren().add(startButton);
 
-        // ----------- Create Scene & Show Stage
-        Scene scene = new Scene(this, 800, 600);
-        Stage stage = new Stage();
-        stage.setTitle("Car Wash GUI");
-        stage.setScene(scene);
-        stage.show();
+        Button backButton = new Button("⬅ Back to Menu");
+        backButton.setPrefWidth(200);
+        backButton.setStyle(
+            "-fx-font-size: 14px; " +
+            "-fx-background-color: #E91E63; " +
+            "-fx-text-fill: white; " +
+            "-fx-font-weight: bold; " +
+            "-fx-background-radius: 8px;"
+        );
+        backButton.setOnAction(
+            e -> 
+            {
+                Platform.runLater(
+                    () -> 
+                    {
+                        ((Stage) getScene().getWindow()).close(); // close current sim window
+                        try 
+                        {
+                            new ServiceStation().start(new Stage()); // reopen start menu
+                        } 
+                        catch (Exception ex) 
+                        {
+                            ex.printStackTrace();
+                        }
+                    }
+                );
+            }
+        );
+
+        // getChildren().add(backButton);
+
+
+        getChildren().addAll(title, waitLayout, pumpLayout, logArea, pauseButton,backButton);
     }
 
     // -------- Initialize Waiting Area --------
@@ -311,6 +376,7 @@ class CarWashGUI extends VBox
 public class ServiceStation extends Application
 {
     private static CarWashGUI gui;
+    private Stage mainStage;
 
     public ServiceStation()
     {
@@ -328,102 +394,154 @@ public class ServiceStation extends Application
         });
     }
 
+    public static void showMainMenuAgain() {
+        Platform.runLater(() -> {
+            try {
+                new ServiceStation().start(new Stage());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
     @Override
     public void start(Stage stage)
     {
-        // default values
-        int waitingCapacity = 5;
-        int pumpCount = 3;
+        // default values are Waiting_capcity (5) & Pump number (3)
         
-        // --------- Prompt 1: Waiting Area Capacity
-        TextInputDialog waitDialog = new TextInputDialog(String.valueOf(waitingCapacity));
-        waitDialog.setTitle("Car Wash Setup");
-        waitDialog.setHeaderText("Enter Waiting Area Capacity");
-        waitDialog.setContentText("Number Cars That Can Wait:");
+        this.mainStage = stage;
+        // ------------ Start Menu
+        VBox menuLayout = new VBox(15);
+        menuLayout.setPadding(new Insets(30));
+        menuLayout.setStyle("-fx-background-color: linear-gradient(to bottom right, #2196F3, #64B5F6);");
 
-        Optional<String> waitResutl = waitDialog.showAndWait();
-        if (waitResutl.isPresent() && !waitResutl.get().trim().isEmpty()) 
-        {
-          try 
-          {
-            waitingCapacity = Integer.parseInt(waitResutl.get().trim());
-            if (waitingCapacity < 1) 
-            {
-                showAlert("Waiting capacity must be at least 1. Using defualt (5).");
-                waitingCapacity = 5;
-            }
-          } 
-          catch (NumberFormatException e) 
-          {
-            showAlert("Invalid input! Using default waiting capacity (5).");
-            waitingCapacity = 5;
-          }
-        }
+        Label title = new Label("🚗 Car Wash Simulation");
+        title.setFont(Font.font("Arial", 28));
+        title.setTextFill(Color.WHITE);
 
-        // --------- Prompt 2: Number of pumps
-        TextInputDialog pumpDialog = new TextInputDialog(String.valueOf(pumpCount));
-        pumpDialog.setTitle("Car Wash Setup");
-        pumpDialog.setHeaderText("Enter Number Of Pumps");
-        pumpDialog.setContentText("Number of service bays:");
+        Label subtitle = new Label("AI Section 5 — Team Project");
+        subtitle.setTextFill(Color.WHITE);
+        subtitle.setFont(Font.font("Arial", 14));
 
-        Optional<String> pumbResult = pumpDialog.showAndWait();
+        // ------------- Input Fields
+        TextField waitingField = new TextField();
+        waitingField.setPromptText("Enter waiting area capacity (default 5)");
 
-        if (pumbResult.isPresent() && !pumbResult.get().trim().isEmpty())
-        {
-            try 
-            {
-                pumpCount = Integer.parseInt(pumbResult.get().trim());
-                if (pumpCount < 1) 
-                {
-                    showAlert("Pump count must be at least 1. Using default (3).");
-                    pumpCount = 3;
+        TextField pumpField = new TextField();
+        pumpField.setPromptText("Enter number of pumbs (default 3)");
+
+        // ------------- Start Button
+        Button startBtn = new Button("▶ Start Simulation");
+        startBtn.setStyle(
+            "-fx-background-color: #ffffff; -fx-text-fill: #2196F3; -fx-font-size: 16px; " +
+            "-fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 10px 20px;"
+        );
+        startBtn.setOnAction(
+                e ->{
+                int waitingCapacity = 5;
+                int pumpCount = 3;
+
+                try {
+                    if (!waitingField.getText().trim().isEmpty())
+                        waitingCapacity = Math.max(1, Integer.parseInt(waitingField.getText().trim()));
+                    if (!pumpField.getText().trim().isEmpty())
+                        pumpCount = Math.max(1, Integer.parseInt(pumpField.getText().trim()));
+                } catch (NumberFormatException ex) {
+                    showAlert("Invalid input! Using default values (waiting=5, pumps=3).");
                 }
+
+                startSimulation(waitingCapacity, pumpCount);
             }
-            catch (NumberFormatException e) 
-            {
-                showAlert("Invalid input! Using default pump count (3).");
-                pumpCount = 3;
-            }
-        }
+        );  
+        
+        // ------------- Exit Button
+        Button exitBtn = new Button("Exit");
+        exitBtn.setStyle(
+            "-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-size: 14px; -fx-background-radius: 8px;"
+        );
+        exitBtn.setOnAction(e -> Platform.exit());
 
-        // ----------- Create GUI and Start Simulation
-        int finalWaitingCapacity = waitingCapacity;
-        int finalPumpCount = pumpCount;
+        // ------------- Credits Section
+        Label credits = new Label(
+            "Created by:\n" +
+            "Ali Radwan • Adel Hefny • Ziad Salama • Mohamed Mahmoud • Asser Ahmed"
+        );
+        credits.setFont(Font.font("Arial", 13));
+        credits.setTextFill(Color.WHITE);
+        credits.setAlignment(Pos.CENTER);
+        credits.setStyle("-fx-opacity: 0.9;");
 
-        gui = new CarWashGUI(finalWaitingCapacity, finalPumpCount);
+        // ---- Fade-In Animation for Credits ----
+        FadeTransition fadeIn = new FadeTransition(javafx.util.Duration.seconds(2.5), credits);
+        fadeIn.setFromValue(0.0);
+        fadeIn.setToValue(1.0);
+        fadeIn.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        fadeIn.setAutoReverse(true);
+        fadeIn.play();
 
-        new Thread(() -> runSimulation(finalWaitingCapacity, finalPumpCount)).start();
+        Separator line = new Separator();
+        line.setStyle("-fx-background-color: white; -fx-opacity: 0.3;");
+        line.setPrefWidth(400);
+
+        // ---- Add all elements neatly ----
+        menuLayout.getChildren().addAll(
+            title,
+            subtitle,
+            waitingField,
+            pumpField,
+            startBtn,
+            exitBtn,
+            line,
+            credits
+        );
+        menuLayout.setAlignment(Pos.CENTER);
+
+        Scene menuScene = new Scene(menuLayout, 800, 600);
+        stage.setTitle("Car Wash Simulation");
+        stage.setScene(menuScene);
+        stage.show();
     }
-
 
     private void runSimulation(int waitingCapacity, int pumpCount)
     {
         try 
         {
+            Thread.sleep(500); // slight delay for GUI render
             Semaphore mutex = new Semaphore(1);
             Semaphore empty = new Semaphore(waitingCapacity);
             Semaphore full = new Semaphore(0);
             Semaphore pumps = new Semaphore(pumpCount);
 
             Queue<String> queue = new LinkedList<>();
-
-            // Start Pump Thread
+            
+            // Start Pump Threads
             for (int i = 0; i < pumpCount; i++) 
             {
                 new Pump(i, gui, queue, mutex, empty, full, pumps).start();
             }
 
-            // Start car Thread (30 Cars Total)
+            // Start Car Threads
             for (int i = 0; i < 30; i++) 
             {
                 new Car("C" + i, gui, queue, mutex, empty, full).start();
-                Thread.sleep(1200); // Display between arrivals
+                Thread.sleep(1500);
             }
-        }
+        } 
         catch (Exception e) 
         {
             e.printStackTrace();
         }
+    }
+
+    private void startSimulation(int waitingCapacity, int pumpCount)
+    {
+        // Create the simulation GUI inside the SAME stage
+        gui = new CarWashGUI(waitingCapacity, pumpCount);
+
+        Scene simScene = new Scene(gui, 800, 600);
+        mainStage.setScene(simScene);
+
+        new Thread(() -> runSimulation(waitingCapacity, pumpCount)).start();
     }
 
     public static void main(String[] args)
