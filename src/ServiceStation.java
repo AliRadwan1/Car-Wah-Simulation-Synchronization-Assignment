@@ -1,70 +1,134 @@
-/*
-* Group Members:
-* Ali Radwan Farouk    20231110
-* Adel Hefny           20230198
-* Ziad Salama          20230150
-* Mohamed Mahmoud      20230354
-* Asser Ahmed          20230655
-* 
-* Section: AI S5
-* Submission to TA: Mena Asfour
- */
-import java.util.*;
-import java.lang.*;
-public class ServiceStation {
-    static Integer pumps_count,queue_size;
-    public static void take_inputs(){
-        Scanner scanner = new Scanner(System.in);
-        System.out.print("Enter the number of pumps: ");
-        pumps_count = Integer.parseInt(scanner.nextLine());
-        System.out.print("Enter the number of waiting area size: ");
-        queue_size = Integer.parseInt(scanner.nextLine());
-    }
-    public static void main(String[] args) {
-        take_inputs();
-    }
-}
+import java.util.LinkedList;
+import java.util.Queue;
 
-class BoundedBuffer<T> {
-    private final Object[] buffer;
-    private int in = 0;
-    private int out = 0;
-    private final int size;
-
-    private final Semaphore empty;
-    private final Semaphore full;
-    private final Semaphore mutex;
-
-    public BoundedBuffer(int size) {
- 
-    }
-
-    // Insert an item into the buffer
-    public void produce(T item) {
-
-    }
-
-    @SuppressWarnings("unchecked")
-    public T consume() {
-
-    }
-}
-
-class Pump implements Runnable {
-    public void run() {
-
-    }
-}
-
-class Car implements Runnable {
-    public void run() {
-
-    }
-}
-
-class Semaphore {
+class Semaphore
+{
     private int value;
-    public Semaphore(int value) {this.value = value;}
-    public synchronized void waitSem() {}
-    public synchronized void signalSem() {}
+
+    public Semaphore(int initial)
+    {
+        this.value = initial;
+    }
+    
+    public synchronized void demand()
+    {
+        value--;
+        while (value < 0) { // while and not if, to ensure that it waits
+            try {
+                wait(); // add to queue + sleep
+            } catch (InterruptedException e) {
+
+            }
+        }
+    }
+
+    public synchronized void release()
+    {
+        value++;
+        notify(); // remove from queue (not neces. this one) + wake up
+    }
+}
+
+
+class Car extends Thread {
+    private final int id;
+    private final Queue<Car> queue;
+    private final Semaphore mutex, free, standby;
+
+    public Car(int id, Queue<Car> queue, Semaphore mutex, Semaphore free, Semaphore standby) {
+        this.id = id;
+        this.queue = queue;
+        this.mutex = mutex;
+        this.free = free;
+        this.standby = standby;
+    }
+
+    @Override
+    public void run() 
+    {
+        System.out.println("Car " + id + " arrived");
+        free.demand(); // attempt to join + modify queue
+        mutex.demand();
+
+        queue.add(this);
+        System.out.println("Car " + id + " entered the queue (Queue size: " + queue.size() + ")");
+
+        mutex.release();
+        standby.release(); // allow a pump to serve
+    }
+
+    public int getCarId() {
+        return id;
+    }
+}
+
+class Pump extends Thread {
+    private final int id;
+    private final Queue<Car> cars_queue;
+    private final Semaphore mutex, free, standby, bays;
+
+    public Pump(int id, Queue<Car> cars_queue, Semaphore mutex, Semaphore free, Semaphore standby, Semaphore bays) {
+        this.id = id;
+        this.cars_queue = cars_queue;
+        this.mutex = mutex;
+        this.free = free;
+        this.standby = standby;
+        this.bays = bays;
+    }
+
+    @Override
+    public void run() 
+    {
+        while (true) 
+        {
+            standby.demand(); // attempt to serve + modify queue
+            mutex.demand();
+
+            Car car = cars_queue.poll();
+            System.out.println("Pump " + id + ": Car " + car.getCarId() + " taken for service");
+            mutex.release();
+            free.release(); // allow a new car to join the queue
+
+            bays.demand(); // attempt to occupy a bay
+            System.out.println("Pump " + id + ": Car " + car.getCarId() + " begins service");
+            try {
+                Thread.sleep(1500); // service time
+            } catch (InterruptedException e) {
+
+            }
+
+            System.out.println("Pump " + id + ": Car " + car.getCarId() + " finished service");
+            System.out.println("Pump " + id + ": Bay released");
+            bays.release(); // allow another pump to occupy the bay
+        }
+    }
+}
+
+public class ServiceStation {
+    public static void main(String[] args) 
+    {
+        int waitingAreaCapacity = 5;
+        int numPumps = 3;
+        int numCars = 10;
+
+        Queue<Car> cars_queue = new LinkedList<>();
+
+        Semaphore mutex = new Semaphore(1);
+        Semaphore free = new Semaphore(waitingAreaCapacity);
+        Semaphore standby = new Semaphore(0);
+        Semaphore bays = new Semaphore(numPumps);
+
+        for (int i = 1; i <= numPumps; i++) {
+            new Pump(i, cars_queue, mutex, free, standby, bays).start();
+        }
+
+        for (int i = 1; i <= numCars; i++) {
+            new Car(i, cars_queue, mutex, free, standby).start();
+            try {
+                Thread.sleep(500); // arrival delay
+            } catch (InterruptedException e) {
+
+            }
+        }
+    }
 }
