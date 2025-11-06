@@ -1,25 +1,4 @@
-/*
-* Group Members:
-* Ali Radwan Farouk    20231110
-* Adel Hefny           20230198
-* Ziad Salama          20230150
-* Mohamed Mahmoud      20230354
-* Asser Ahmed          20230655
-* 
-* Section: AI S5
-* Submission to TA: Mena Asfour
-*/
-
-/*
- * Compile command
- * & "D:\Downloads\java\openjdk-25+36_windows-x64_bin\jdk-25\bin\javac.exe" "--module-path" "C:\javafx-sdk-25.0.1\lib" "--add-modules" "javafx.controls,javafx.fxml" "ServiceStation.java"
- * Run Command
- * & "D:\Downloads\java\openjdk-25+36_windows-x64_bin\jdk-25\bin\java.exe" "--enable-native-access=javafx.graphics" "--module-path" "C:\javafx-sdk-25.0.1\lib" "--add-modules" "javafx.controls,javafx.fxml" "ServiceStation"
- * 
- */
-
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
+import javafx.geometry.*;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.effect.ColorAdjust;
@@ -59,33 +38,20 @@ class Car extends Thread
         this.full = full;
     }
 
-    private void checkPaused() {
-        synchronized (gui) {
-            while (gui.isPaused()) {
-                try {
-                    gui.wait();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-            }
-        }
-    }
-
     public void run()
     {
         try {
-            checkPaused();
+            // checkPaused();
             empty.waitS(); // wait until there is space to add car
-            checkPaused();
+            // checkPaused();
             mutex.waitS(); // if the queue (Waiting Area) being in use wait else take mutex
             
             queue.add(ID);
             gui.log(ID + " entered waiting area");
             gui.updateWaitingArea(new ArrayList<>(queue));
-            Thread.sleep(1500);
+            Thread.sleep(2000);
 
-            checkPaused();
+            // checkPaused();
             full.signal();
             mutex.signal();
         } 
@@ -116,25 +82,12 @@ class Pump extends Thread
         this.pumps = pumps;
     }
 
-    private void checkPaused() {
-        synchronized (gui) {
-            while (gui.isPaused()) {
-                try {
-                    gui.wait();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-            }
-        }
-    }
-
     public void run()
     {
         while (true) {
             try 
             {
-                checkPaused();
+                // checkPaused();
                 full.waitS();  // wait until there is cars waiting
                 pumps.waitS(); // wait until ther is a free pump
                 mutex.waitS(); // if the queue (Waiting Area) being in use wait else take mutex
@@ -147,7 +100,7 @@ class Pump extends Thread
                 mutex.signal(); // let go of mutex so other threads can work on the queue
                 empty.signal(); // signal that there is one more space free in waiting area
 
-                checkPaused();
+                // checkPaused();
                 Thread.sleep(5000); // simulate service duration
                 gui.log("Pump " + (pumpID + 1) + ": " + car + " finishes service");
                 gui.updatePumpStatus(pumpID, car, false);
@@ -197,7 +150,8 @@ class Semaphore
 class CarWashGUI extends VBox //Pane
 {
     private Pane animationPane; // where cars move
-    private HBox waitingAreaVisual;
+    private GridPane waitingGrid;               // visual grid (slots inside a ScrollPane)
+    private ScrollPane waitingScroll;
     private HBox pumpBox;
     private TextArea logArea;
 
@@ -205,164 +159,154 @@ class CarWashGUI extends VBox //Pane
     private Map<String, ImageView> carMap = new HashMap<>();
     private List<ImageView> pumpImages = new ArrayList<>();
     private List<StackPane> waitingSlots = new ArrayList<>();
+    private final Set<String> currentWaitingCars = Collections.synchronizedSet(new HashSet<>());
 
     private int waitingCapacity;
     private int pumpCount;
-
-    private Button pauseButton;
-    private volatile boolean paused = false;
-
-    // private Image carImage;
-
-    public boolean isPaused() { return paused; }
-
-    public void setPaused(boolean paused) { this.paused = paused; }
     
-    private Image carImage = new Image(getClass().getResource("Images/car.png").toExternalForm(), 60, 30, true, true);
-    private Image pumpIdle = new Image(getClass().getResource("Images/pump_idle.png").toExternalForm(), 80, 80, true, true);
-    private Image pumpActive = new Image(getClass().getResource("Images/pump_active.png").toExternalForm(), 80, 80, true, true);
-    private Image slotImage = new Image(getClass().getResource("Images/slot.png").toExternalForm(), 80, 40, true, true);
+    private final Image carImage;
+    private final Image pumpIdle;
+    private final Image pumpActive;
+    private final Image slotImage;
+    private final Image backgroundImage; // optional
 
+    private final int SLOTS_PER_ROW = 3;
+    private final int VISIBLE_ROWS = 5;     // 3 x 5 = 15 visible slots
+    private final double SLOT_W = 120;
+    private final double SLOT_H = 70;
 
     public CarWashGUI(int waitingCapacity, int pumpCount)
     {
         this.waitingCapacity = waitingCapacity;
         this.pumpCount = pumpCount;
 
-        setSpacing(10);
-        setPadding(new Insets(10));
+        // load images from classpath (GUI/Images/)
+        carImage = new Image(getClass().getResource("Images/car.png").toExternalForm(), 60, 30, true, true);
+        pumpIdle = new Image(getClass().getResource("Images/pump_idle.png").toExternalForm(), 100, 100, true, true);
+        pumpActive = new Image(getClass().getResource("Images/pump_active.png").toExternalForm(), 100, 100, true, true);
+        slotImage = new Image(getClass().getResource("Images/slot.png").toExternalForm(), (int)SLOT_W, (int)SLOT_H, true, true);
+        Image tmpBg;
+        try 
+        {
+            tmpBg = new Image(getClass().getResource("Images/background.png").toExternalForm());
+        } 
+        catch (Exception ex) 
+        {
+            tmpBg = null;
+        }
+        backgroundImage = tmpBg;
+
+        setSpacing(12);
+        setPadding(new Insets(12));
         setAlignment(Pos.TOP_CENTER);
 
         // ----------- Title
         Label title = new Label("🚗 Car Wash Simulation");
         title.setFont(Font.font("Arial", 22));
         title.setTextFill(Color.DARKBLUE);
-        // -------- Animation Pane
+
+        // -------- animationPane: base layer for moving cars + background
         animationPane = new Pane();
-        animationPane.setPrefSize(780, 250);
-        animationPane.setStyle("-fx-background-color: #E3F2FD; -fx-border-color: #90CAF9; -fx-border-width: 2;");
-    
-        // animationPane = new Pane();
-        // animationPane.setPrefSize(800, 400);
-        // animationPane.setStyle("-fx-background-color: #E3F2FD; -fx-border-color: #90CAF9; -fx-border-width: 2px;");
-        
+        animationPane.setPrefSize(760, 280);
+        animationPane.setStyle("-fx-border-color: #90CAF9; -fx-border-width: 2; -fx-background-radius: 6;");
+        if (backgroundImage != null) 
+        {
+            BackgroundImage bimg = new BackgroundImage(backgroundImage, BackgroundRepeat.REPEAT,
+                                         BackgroundRepeat.REPEAT, BackgroundPosition.CENTER, BackgroundSize.DEFAULT);
+            animationPane.setBackground(new Background(bimg));
+        } 
+        else 
+        {
+            animationPane.setBackground(
+                new Background(new BackgroundFill(Color.web("#E3F2FD"), null, null)));
+        }
+
         // ---------- Visual Waiting Area (slots)
-        Label waitLabel = new Label("Waiting Area:");
-        waitLabel.setFont(Font.font(16));
+        waitingGrid = new GridPane();
+        waitingGrid.setHgap(12);
+        waitingGrid.setVgap(12);
+        waitingGrid.setPadding(new Insets(8));
+        waitingGrid.setAlignment(Pos.CENTER);
 
-        waitingAreaVisual = new HBox(20);
-        waitingAreaVisual.setAlignment(Pos.CENTER);
-        waitingAreaVisual.setPadding(new Insets(10));
-        waitingAreaVisual.setBackground(new Background(new BackgroundFill(Color.LIGHTGRAY, null, null)));
-        initWaitingSlots();
+        // create all slot nodes (we will add them to the grid)
+        createWaitingSlots(waitingCapacity);
 
-        VBox waitingLayout = new VBox(5, waitLabel, waitingAreaVisual);
-        waitingLayout.setAlignment(Pos.CENTER);
+        waitingScroll = new ScrollPane(waitingGrid);
+        waitingScroll.setPrefViewportWidth(SLOTS_PER_ROW * (SLOT_W + 12) + 20);
+        // compute visible height for VISIBLE_ROWS rows
+        double visibleHeight = VISIBLE_ROWS * (SLOT_H + 12) + 30;
+        waitingScroll.setPrefViewportHeight(Math.min(visibleHeight, waitingCapacity * (SLOT_H + 12) + 30));
+        waitingScroll.setFitToWidth(true);
+        waitingScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        waitingScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
 
-        // ---------- Pump Section (images)
-        Label pumpLabel = new Label("Service Bays:");
-        pumpLabel.setFont(Font.font(16));
-        pumpBox = new HBox(40);
+        VBox waitingBox = new VBox(6, new Label("Waiting Area (slots)"), waitingScroll);
+        waitingBox.setAlignment(Pos.CENTER);
+
+        // -------- pump area
+        pumpBox = new HBox(30);
         pumpBox.setAlignment(Pos.CENTER);
-        initPumps();
+        createPumps(pumpCount);
 
-        VBox pumpLayout = new VBox(5, pumpLabel, pumpBox);
-        pumpLayout.setAlignment(Pos.CENTER);
+        VBox pumpBoxWithLabel = new VBox(6, new Label("Service Bays"), pumpBox);
+        pumpBoxWithLabel.setAlignment(Pos.CENTER);
 
-        // -------- Log Section
+        // -------- log
         logArea = new TextArea();
         logArea.setEditable(false);
-        logArea.setPrefHeight(150);
+        logArea.setPrefHeight(120);
 
-        // // -------- Buttons
-        // pauseButton = createButton("⏸ Pause", "#FF9800");
-        // backButton = createButton("⬅ Back to Menu", "#E91E63");
-
-        // pauseButton.setOnAction(e -> togglePause());
-        // backButton.setOnAction(e -> Platform.runLater(ServiceStation::showMainMenuAgain));
-        // ----------- Pause Button
-        pauseButton = new Button("⏸ Pause");
-        pauseButton.setPrefWidth(200);
-        pauseButton.setStyle(
-            "-fx-font-size: 14px; " +
-            "-fx-background-color: #FF9800; " +
-            "-fx-text-fill: white; " +
-            "-fx-font-weight: bold; " +
-            "-fx-background-radius: 8px;"
-        );
-        pauseButton.setOnAction(
-            e -> 
-            {
-            if (!paused) 
-            {
-                paused = true;
-                pauseButton.setText("▶ Resume");
-                log("Simulation paused...");
-            } 
-            else 
-            {
-                paused = false;
-                synchronized (this) { notifyAll(); } // wake all waiting threads
-                pauseButton.setText("⏸ Pause");
-                log("Simulation resumed...");
-            }
-        });
-
-        // ----------- Back To Menu Button
+        // -------- back button only
         Button backButton = new Button("⬅ Back to Menu");
-        backButton.setPrefWidth(200);
+        backButton.setPrefWidth(180);
         backButton.setStyle(
-            "-fx-font-size: 14px; " +
-            "-fx-background-color: #E91E63; " +
-            "-fx-text-fill: white; " +
-            "-fx-font-weight: bold; " +
-            "-fx-background-radius: 8px;"
-        );
-        backButton.setOnAction(
-            e -> 
-            {
-                Platform.runLater(
-                    () -> 
-                    {
-                        ((Stage) getScene().getWindow()).close(); // close current sim window
-                        try 
-                        {
-                            new ServiceStation().start(new Stage()); // reopen start menu
-                        } 
-                        catch (Exception ex) 
-                        {
-                            ex.printStackTrace();
-                        }
-                    }
-                );
-            }
-        );
+                "-fx-font-size: 13px; -fx-background-color: #E91E63; -fx-text-fill: white; " +
+                "-fx-font-weight: bold; -fx-background-radius: 8px;");
+        backButton.setOnAction(e -> Platform.runLater(ServiceStation::showMainMenuAgain));
 
-        HBox buttonBox = new HBox(10, pauseButton, backButton);
-        buttonBox.setAlignment(Pos.CENTER);
+        HBox controls = new HBox(backButton);
+        controls.setAlignment(Pos.CENTER);
 
-        getChildren().addAll(title, animationPane, waitingLayout, pumpLayout, logArea, buttonBox);  
+        StackPane waitingVisualPane = new StackPane(waitingGrid,animationPane);
+        waitingVisualPane.setPrefHeight(300);
+
+        getChildren().addAll(title, waitingVisualPane, pumpBoxWithLabel, logArea, controls);
     }
 
-    // ---------- Waiting area (visual boxes)
-    private void initWaitingSlots() {
-        for (int i = 0; i < waitingCapacity; i++) {
+    // create waiting slot nodes and populate grid
+    private void createWaitingSlots(int capacity) {
+        waitingSlots.clear();
+        waitingGrid.getChildren().clear();
+
+        int rows = (int) Math.ceil((double) capacity / SLOTS_PER_ROW);
+        for (int i = 0; i < capacity; i++) {
             StackPane slot = new StackPane();
+            slot.setPrefSize(SLOT_W, SLOT_H);
             ImageView slotBg = new ImageView(slotImage);
+            slotBg.setFitWidth(SLOT_W);
+            slotBg.setFitHeight(SLOT_H);
             Label label = new Label("Empty");
+            label.setFont(Font.font(12));
             label.setTextFill(Color.GRAY);
             slot.getChildren().addAll(slotBg, label);
             waitingSlots.add(slot);
-            waitingAreaVisual.getChildren().add(slot);
+
+            int r = i / SLOTS_PER_ROW;
+            int c = i % SLOTS_PER_ROW;
+            waitingGrid.add(slot, c, r);
         }
     }
 
-    // ---------- Pump area (visual boxes)
-    private void initPumps() {
-        for (int i = 0; i < pumpCount; i++) {
-            ImageView pumpView = new ImageView(pumpIdle);
-            pumpImages.add(pumpView);
-            pumpBox.getChildren().add(pumpView);
+    private void createPumps(int count) {
+        pumpBox.getChildren().clear();
+        pumpImages.clear();
+        
+        for (int i = 0; i < count; i++) {
+            ImageView p = new ImageView(pumpIdle);
+            p.setFitWidth(100);
+            p.setFitHeight(100);
+            pumpImages.add(p);
+            pumpBox.getChildren().add(p);
         }
     }
 
@@ -372,12 +316,12 @@ class CarWashGUI extends VBox //Pane
     }
 
     // ---------- Update Pump Status
-    public void updatePumpStatus(int pumpIndex, String carId, boolean occupied) 
-    {
-        Platform.runLater
-        (
-            () -> 
-            {
+
+    // called by Pump threads to toggle pump's visual and move car
+    // occupied==true means car moves to pump and pump becomes active
+    public void updatePumpStatus(int pumpIndex, String carId, boolean occupied) {
+        Platform.runLater(
+            () -> {
                 ImageView pumpView = pumpImages.get(pumpIndex);
                 if (occupied) {
                     pumpView.setImage(pumpActive);
@@ -390,17 +334,28 @@ class CarWashGUI extends VBox //Pane
         );
     }
 
-    // ---------- Update Waiting Area
-    public void updateWaitingArea(List<String> cars) 
-    {
+    // update waiting area labels and animate new cars into the grid
+    public void updateWaitingArea(List<String> cars) {
         Platform.runLater(
-            () -> 
-            {
+            () -> {
+                Set<String> newWaitingCars = new HashSet<>(cars);
+
+                for (String carID : newWaitingCars) 
+                {
+                    if (!currentWaitingCars.contains(carID)) 
+                    {
+                        int slotIndex = cars.indexOf(carID);
+                        moveCarToWaiting(carID, slotIndex);
+                    }
+                }
+
+                // Remove cars that left the waiting area (now at pump)
+                currentWaitingCars.removeIf(id -> !newWaitingCars.contains(id));
+
                 for (int i = 0; i < waitingSlots.size(); i++) 
                 {
                     StackPane slot = waitingSlots.get(i);
                     Label label = (Label) slot.getChildren().get(1);
-
                     if (i < cars.size()) 
                     {
                         String carId = cars.get(i);
@@ -414,55 +369,133 @@ class CarWashGUI extends VBox //Pane
                         label.setTextFill(Color.GRAY);
                     }
                 }
+
+                // ✅ make sure all cars are drawn above slots
+                for (ImageView carView : carMap.values()) {
+                    carView.toFront();
+                }
             }
         );
     }
 
-    // ---------- Animation: Move car to waiting slot
-    private void moveCarToWaiting(String carId, int index)
+    // ================= Animation helpers =================
+
+    // move a newly arrived car onto its slot index
+    private void moveCarToWaiting(String carId, int slotIndex) 
     {
+        // create view
         ImageView carView = new ImageView(carImage);
+        carView.setFitWidth(60);
+        carView.setFitHeight(30);
 
-        // Recolor the same car image randomly for variety
-        carView.setEffect(new ColorAdjust(0, 0, Math.random() * 0.4 - 0.2, 0));
+        // small random tint for variety
+        carView.setEffect(new ColorAdjust(0, 0, Math.random() * 0.35 - 0.175, 0));
 
-        carView.setLayoutX(-80);
-        carView.setLayoutY(100 + index * 40);
+        // place off-screen left as start
+        carView.setLayoutX(-120);
+        carView.setLayoutY(animationPane.getHeight() / 2.0 - 20);
+
         carMap.put(carId, carView);
-        animationPane.getChildren().add(carView);
+        currentWaitingCars.add(carId);  // mark as present in waiting area
 
-        TranslateTransition tt = new TranslateTransition(Duration.seconds(1.2), carView);
-        tt.setToX(100 + index * 90);
-        tt.setToY(180);
-        tt.play();
+        Platform.runLater(() -> {
+            animationPane.getChildren().add(carView);
+            carView.toFront();
+        });
+
+        // compute target coordinates (slot's center) in animationPane coordinate space
+        Platform.runLater(() -> {
+            // ensure layout pass has occurred
+            StackPane slot = waitingSlots.get(slotIndex);
+            Point2D slotCenterScene = slot.localToScene(slot.getWidth() / 2.0, slot.getHeight() / 2.0);
+            Point2D target = animationPane.sceneToLocal(slotCenterScene);
+
+            // compute translation distances (we use translate because layoutX already set)
+            double dx = target.getX() - carView.getLayoutX();
+            double dy = target.getY() - carView.getLayoutY();
+
+            TranslateTransition tt = new TranslateTransition(Duration.seconds(1.2), carView);
+            tt.setByX(dx);
+            tt.setByY(dy);
+            tt.setOnFinished(ev -> {
+                // snap to exact slot coords to avoid cumulative translate issues
+                carView.setLayoutX(target.getX());
+                carView.setLayoutY(target.getY());
+                carView.setTranslateX(0);
+                carView.setTranslateY(0);
+                carView.toFront();
+            });
+            tt.play();
+        });
     }
-
-
-    // ---------- Animation: Move car to pump
-    private void moveCarToPump(String carId, int pumpIndex)
+    
+    // ---------- Animation: Move car to pump ----------d
+    // move car to pump area (center in front of pump)
+    private void moveCarToPump(String carId, int pumpIndex) 
     {
         ImageView carView = carMap.get(carId);
-        if (carView == null) return;
+        if (carView == null) 
+        {
+            // if missing (rare), create and fade in near pump
+            carView = new ImageView(carImage);
+            carView.setFitWidth(60);
+            carView.setFitHeight(30);
+            carMap.put(carId, carView);
+            animationPane.getChildren().add(carView);
+            carView.toFront();
+        }
 
-        double pumpX = 350 + pumpIndex * 140;
-        double pumpY = 80;
+        // make a final copy for lambda use
+        final ImageView carFinal = carView;
 
-        TranslateTransition tt = new TranslateTransition(Duration.seconds(1.8), carView);
-        tt.setToX(pumpX);
-        tt.setToY(pumpY);
-        tt.play();
+        Platform.runLater(() -> {
+            ImageView pumpView = pumpImages.get(pumpIndex);
+            Point2D pumpCenterScene = pumpView.localToScene(
+                    pumpView.getBoundsInLocal().getWidth() / 2.0,
+                    pumpView.getBoundsInLocal().getHeight() / 2.0
+            );
+            Point2D pumpCenterInAnim = animationPane.sceneToLocal(pumpCenterScene);
+
+            // choose a target slightly in front of pump (lower Y)
+            double targetX = pumpCenterInAnim.getX();
+            double targetY = pumpCenterInAnim.getY() + 10; // adjust to appear in front of pump
+
+            double dx = targetX - carFinal.getLayoutX();
+            double dy = targetY - carFinal.getLayoutY();
+
+            TranslateTransition tt = new TranslateTransition(Duration.seconds(1.8), carFinal);
+            tt.setByX(dx);
+            tt.setByY(dy);
+            tt.setOnFinished(ev -> {
+                // snap to pump spot
+                carFinal.setLayoutX(targetX);
+                carFinal.setLayoutY(targetY);
+                carFinal.setTranslateX(0);
+                carFinal.setTranslateY(0);
+            });
+            tt.play();
+        });
     }
 
-    // ---------- Animation: Move car out ----------
+    // animate car leaving
     private void moveCarOut(String carId) 
     {
         ImageView carView = carMap.remove(carId);
         if (carView == null) return;
 
-        TranslateTransition tt = new TranslateTransition(Duration.seconds(2), carView);
-        tt.setToX(900);
-        tt.setOnFinished(e -> animationPane.getChildren().remove(carView));
-        tt.play();
+        Platform.runLater(() -> {
+            // move to right off-screen (x = animationPane.width + 200)
+            double targetX = animationPane.getWidth() + 300;
+            double dx = targetX - carView.getLayoutX();
+            double dy = -60; // a little upward as it leaves
+
+            TranslateTransition tt = new TranslateTransition(Duration.seconds(2.0), carView);
+            tt.setByX(dx);
+            tt.setByY(dy);
+            tt.setOnFinished(ev -> animationPane.getChildren().remove(carView));
+            // carView.toFront();
+            tt.play();
+        });
     }
 }
 
