@@ -31,7 +31,6 @@ import javafx.animation.FadeTransition;
 import javafx.animation.TranslateTransition;
 import javafx.application.*;
 import javafx.stage.*;
-import javafx.application.Platform;
 import javafx.util.Duration;
 
 import java.util.*;
@@ -609,24 +608,19 @@ public class ServiceStation extends Application
         
         this.mainStage = stage;
         // ------------ Start Menu
-        VBox menuLayout = new VBox(15);
-        menuLayout.setPadding(new Insets(30));
-        menuLayout.setStyle("-fx-background-color: linear-gradient(to bottom right, #2196F3, #64B5F6);");
+        // Background Image
+        Image backgroundImage = new Image(getClass().getResource("Images/menu_bg2.png").toExternalForm());
 
-        Label title = new Label("🚗 Car Wash Simulation");
-        title.setFont(Font.font("Arial", 28));
-        title.setTextFill(Color.WHITE);
+        BackgroundImage bgImg = new BackgroundImage(
+            backgroundImage,
+            BackgroundRepeat.NO_REPEAT,
+            BackgroundRepeat.NO_REPEAT,
+            BackgroundPosition.CENTER,
+            BackgroundSize.DEFAULT
+        );
 
-        Label subtitle = new Label("AI Section 5 — Team Project");
-        subtitle.setTextFill(Color.WHITE);
-        subtitle.setFont(Font.font("Arial", 14));
-
-        // ------------- Input Fields
-        TextField waitingField = new TextField();
-        waitingField.setPromptText("Enter waiting area capacity (default 5)");
-
-        TextField pumpField = new TextField();
-        pumpField.setPromptText("Enter number of pumbs (default 3)");
+        StackPane root = new StackPane();
+        root.setBackground(new Background(bgImg));
 
         // ------------- Start Button
         Button startBtn = new Button("▶ Start Simulation");
@@ -634,43 +628,63 @@ public class ServiceStation extends Application
             "-fx-background-color: #ffffff; -fx-text-fill: #2196F3; -fx-font-size: 16px; " +
             "-fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 10px 20px;"
         );
-        startBtn.setOnAction(
-                e ->{
-                int waitingCapacity = 5;
-                int pumpCount = 3;
-
-                try {
-                    if (!waitingField.getText().trim().isEmpty())
-                        waitingCapacity = Math.max(1, Integer.parseInt(waitingField.getText().trim()));
-                    if (!pumpField.getText().trim().isEmpty())
-                        pumpCount = Math.max(1, Integer.parseInt(pumpField.getText().trim()));
-                } catch (NumberFormatException ex) {
-                    showAlert("Invalid input! Using default values (waiting=5, pumps=3).");
+        startBtn.hoverProperty().addListener(
+            (obs, oldVal, newVal) -> {
+                if (newVal) {
+                    startBtn.setStyle(
+                        "-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-size: 16px; " +
+                        "-fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 10px 20px;"
+                    );
+                } else {
+                    startBtn.setStyle(
+                        "-fx-background-color: #ffffff; -fx-text-fill: #2196F3; -fx-font-size: 16px; " +
+                        "-fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 10px 20px;"
+                    );
                 }
-
-                startSimulation(waitingCapacity, pumpCount);
             }
-        );  
-        
+        );
         // ------------- Exit Button
         Button exitBtn = new Button("Exit");
         exitBtn.setStyle(
             "-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-size: 14px; -fx-background-radius: 8px;"
         );
-        exitBtn.setOnAction(e -> Platform.exit());
+        exitBtn.hoverProperty().addListener(
+            (obs, oldVal, newVal) -> {
+                if (newVal) {
+                    exitBtn.setStyle(
+                        "-fx-background-color: #a72525ff; -fx-text-fill: white; -fx-font-size: 14px; -fx-background-radius: 8px;"
+                    );
+                } else {
+                    exitBtn.setStyle(
+                        "-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-size: 14px; -fx-background-radius: 8px;"
+                    );
+                }
+            }
+        );
+        exitBtn.setOnAction(e -> Platform.exit());        
 
         // ------------- Credits Section
         Label credits = new Label(
-            "Created by:\n" +
+            "Created by: AI Section 5 — Team Project\n" +
+            "Team Members:\n" +
             "Ali Radwan • Adel Hefny • Ziad Salama • Mohamed Mahmoud • Asser Ahmed"
         );
         credits.setFont(Font.font("Arial", 13));
         credits.setTextFill(Color.WHITE);
+        credits.setStyle(
+            "-fx-background-color: rgba(80, 80, 80, 0.4);" + 
+            "-fx-text-fill: white;" +
+            "-fx-font-size: 15px;" + 
+            "-fx-font-weight: bold;" + 
+            "-fx-effect: dropshadow(gaussian, black, 0.6, 0.5, 0, 0);" +
+            "-fx-padding: 7px;" +
+            "-fx-background-radius: 10;" +
+            "-fx-opacity: 0.95;"
+        );
         credits.setAlignment(Pos.CENTER);
-        credits.setStyle("-fx-opacity: 0.9;");
 
         // ---- Fade-In Animation for Credits ----
-        FadeTransition fadeIn = new FadeTransition(javafx.util.Duration.seconds(2.5), credits);
+        FadeTransition fadeIn = new FadeTransition(javafx.util.Duration.seconds(3.5), credits);
         fadeIn.setFromValue(0.0);
         fadeIn.setToValue(1.0);
         fadeIn.setCycleCount(javafx.animation.Animation.INDEFINITE);
@@ -681,26 +695,168 @@ public class ServiceStation extends Application
         line.setStyle("-fx-background-color: white; -fx-opacity: 0.3;");
         line.setPrefWidth(400);
 
-        // ---- Add all elements neatly ----
-        menuLayout.getChildren().addAll(
-            title,
-            subtitle,
-            waitingField,
-            pumpField,
-            startBtn,
-            exitBtn,
-            line,
-            credits
-        );
-        menuLayout.setAlignment(Pos.CENTER);
+        VBox menuChoices = new VBox(15, startBtn, exitBtn, line, credits);
+        menuChoices.setAlignment(Pos.CENTER_LEFT);
+        menuChoices.setPadding(new Insets(20));
+        menuChoices.setPrefWidth(300);
+        menuChoices.setTranslateY(200); // move down a bit from center for better layout
 
-        Scene menuScene = new Scene(menuLayout, 800, 600);
+        StackPane menuLayout = new StackPane(menuChoices);
+        menuLayout.setAlignment(Pos.CENTER);
+        menuLayout.setPadding(new Insets(30));
+        root.getChildren().add(menuLayout);
+        
+        Scene menuScene = new Scene(root, 610, 607);
         stage.setTitle("Car Wash Simulation");
         stage.setScene(menuScene);
         stage.show();
+
+        // When Start button is clicked
+        startBtn.setOnAction(e -> showInputDialog(root));
     }
 
-    private void runSimulation(int waitingCapacity, int pumpCount)
+    // ----------- Input Dialog -----------
+    private void showInputDialog(StackPane root)
+    {
+        Label header = new Label("Simulation Settings");
+        header.setFont(Font.font("Arial", 20));
+        header.setTextFill(Color.WHITE);
+
+        // Input Fields
+        TextField waitingField = new TextField();
+        waitingField.setPromptText("Enter waiting area capacity (default 5)");
+        waitingField.setStyle(
+            "-fx-background-color: #272a2bff;" +
+            "-fx-text-fill: white;" +
+            "-fx-prompt-text-fill: #bbbbbb;" +
+            "-fx-border-color: #555555;" +
+            "-fx-border-radius: 5;" +
+            "-fx-background-radius: 5;"
+        );
+
+        TextField pumpField = new TextField();
+        pumpField.setPromptText("Enter number of pumps (default 3)");
+        pumpField.setStyle(
+            "-fx-background-color: #272a2bff;" +
+            "-fx-text-fill: white;" +
+            "-fx-prompt-text-fill: #bbbbbb;" +
+            "-fx-border-color: #555555;" +
+            "-fx-border-radius: 5;" +
+            "-fx-background-radius: 5;"
+        );
+
+        TextField carField = new TextField();
+        carField.setPromptText("Enter number of cars (default 10)");
+        carField.setStyle(
+            "-fx-background-color: #272a2bff;" +
+            "-fx-text-fill: white;" +
+            "-fx-prompt-text-fill: #bbbbbb;" +
+            "-fx-border-color: #555555;" +
+            "-fx-border-radius: 5;" +
+            "-fx-background-radius: 5;"
+        );
+
+        waitingField.setMaxWidth(220);
+        pumpField.setMaxWidth(220);
+        carField.setMaxWidth(220);
+
+        // Buttons
+        HBox buttons = new HBox(15);
+        buttons.setAlignment(Pos.CENTER);
+
+        Button startSimBtn = new Button("Start");
+        startSimBtn.setStyle(
+            "-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14px; " +
+            "-fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 8px 16px;"
+        );
+        startSimBtn.hoverProperty().addListener(
+            (obs, oldVal, newVal) -> {
+                if (newVal) {
+                    startSimBtn.setStyle(
+                        "-fx-background-color: #317a34ff; -fx-text-fill: white; -fx-font-size: 14px; " +
+                        "-fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 8px 16px;"
+                    );
+                } else {
+                    startSimBtn.setStyle(
+                        "-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14px; " +
+                        "-fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 8px 16px;"
+                    );
+                }
+            }
+        );
+
+        Button cancelBtn = new Button("Cancel");
+        cancelBtn.setStyle(
+            "-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-size: 14px; " +
+            "-fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 8px 16px;"
+        );
+        cancelBtn.hoverProperty().addListener(
+            (obs, oldVal, newVal) -> {
+                if (newVal) {
+                    cancelBtn.setStyle(
+                        "-fx-background-color: #a72525ff; -fx-text-fill: white; -fx-font-size: 14px; " +
+                        "-fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 8px 16px;"
+                    );
+                } else {
+                    cancelBtn.setStyle(
+                        "-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-size: 14px; " +
+                        "-fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 8px 16px;"
+                    );
+                }
+            }
+        );
+
+        buttons.getChildren().addAll(startSimBtn,cancelBtn);
+        VBox dialogContent = new VBox(10, header, waitingField, pumpField, carField, buttons);
+        dialogContent.setAlignment(Pos.CENTER);
+        dialogContent.setPadding(new Insets(20));
+        dialogContent.setPrefWidth(300);
+
+        StackPane dialogBox = new StackPane(dialogContent);
+        dialogBox.setAlignment(Pos.CENTER);
+        dialogBox.setStyle(
+            "-fx-background-color: rgba(0,0,0,0.5); " +
+            "-fx-background-radius: 20; -fx-border-radius: 20; " +
+            "-fx-border-color: white; -fx-border-width: 2;"
+        );
+        dialogBox.setPadding(new Insets(30));
+
+        root.getChildren().add(dialogBox);
+
+        cancelBtn.setOnAction(e -> root.getChildren().remove(dialogBox));
+
+        startSimBtn.setOnAction(
+            e ->{
+                int waiting = 5, pumps = 3, cars = 10;
+
+                try 
+                {
+                    if (!waitingField.getText().trim().isEmpty())
+                    {
+                        waiting = Math.max(1, Integer.parseInt(waitingField.getText().trim()));
+                    }
+                    if (!pumpField.getText().trim().isEmpty())
+                    {
+                        pumps = Math.max(1, Integer.parseInt(pumpField.getText().trim()));
+                    }
+                    if (!carField.getText().trim().isEmpty())
+                    {
+                        cars = Math.max(1, Integer.parseInt(carField.getText().trim()));
+                
+                    }
+                } 
+                catch (NumberFormatException ex) 
+                {
+                    showAlert("Invalid input! Using defaults (5, 3, 10).");
+                }
+
+                root.getChildren().remove(dialogBox);
+                startSimulation(waiting, pumps, cars);
+            }
+        );
+    }
+
+    private void runSimulation(int waitingCapacity, int pumpCount, int carCount)
     {
         try 
         {
@@ -719,7 +875,7 @@ public class ServiceStation extends Application
             }
 
             // Start Car Threads
-            for (int i = 0; i < 10; i++) 
+            for (int i = 0; i < carCount; i++) 
             {
                 new Car("C" + i, gui, queue, mutex, empty, full).start();
                 Thread.sleep(1500);
@@ -731,7 +887,7 @@ public class ServiceStation extends Application
         }
     }
 
-    private void startSimulation(int waitingCapacity, int pumpCount)
+    private void startSimulation(int waitingCapacity, int pumpCount, int carCount)
     {
         // Create the simulation GUI inside the SAME stage
         gui = new CarWashGUI(waitingCapacity, pumpCount);
@@ -739,7 +895,7 @@ public class ServiceStation extends Application
         Scene simScene = new Scene(gui, 800, 600);
         mainStage.setScene(simScene);
 
-        new Thread(() -> runSimulation(waitingCapacity, pumpCount)).start();
+        new Thread(() -> runSimulation(waitingCapacity, pumpCount, carCount)).start();
     }
 
     public static void main(String[] args)
