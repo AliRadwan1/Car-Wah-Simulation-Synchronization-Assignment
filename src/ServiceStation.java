@@ -9,12 +9,43 @@
 * Section: AI S5
 * Submission to TA: Mena Asfour
  */
-import java.util.LinkedList;
-import java.util.Queue;
+import java.util.Scanner;
+
+public class ServiceStation {
+    static Integer pumps_count,queue_size,cars_size;
+    static String[] car_names;
+    public static void take_inputs(){
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter the number of pumps: ");
+        pumps_count = Integer.parseInt(scanner.nextLine());
+        System.out.print("Enter the number of waiting area size: ");
+        queue_size = Integer.parseInt(scanner.nextLine());
+        System.out.print("Cars arriving (order): ");
+        String input = scanner.nextLine();
+
+        car_names = input.replaceAll(" ", "").split(","); 
+        cars_size = car_names.length;
+    }
+    public static void main(String[] args) {
+        take_inputs();
+        BoundedBuffer<Car> buffer = new BoundedBuffer<>(queue_size);
+        Semaphore bays = new Semaphore(pumps_count);
+        for (int i = 1; i <= pumps_count; i++) {
+            new Pump(i, buffer, bays).start();
+        }
+
+        for (int i = 0; i < cars_size; i++) {
+            new Car(i,car_names[i], buffer).start();
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ignored) {}
+        }
+    }
+}
 
 class Semaphore
 {
-    private int value;
+    private Integer value;
 
     public Semaphore(int initial)
     {
@@ -24,66 +55,56 @@ class Semaphore
     public synchronized void demand()
     {
         value--;
-        while (value < 0) { // while and not if, to ensure that it waits
+        if(value < 0){
             try {
-                wait(); // add to queue + sleep
+                wait();
             } catch (InterruptedException e) {
-
+                Thread.currentThread().interrupt();
             }
         }
+        
     }
 
     public synchronized void release()
     {
         value++;
-        notify(); // remove from queue (not neces. this one) + wake up
+        if (value <= 0) {
+            notify(); // wake one waiting thread
+        }
     }
 }
 
 
 class Car extends Thread {
     private final int id;
-    private final Queue<Car> queue;
-    private final Semaphore mutex, free, standby;
+    private final String name;
+    private final BoundedBuffer<Car> buffer;
 
-    public Car(int id, Queue<Car> queue, Semaphore mutex, Semaphore free, Semaphore standby) {
+    public Car(int id, String name, BoundedBuffer<Car> buffer) {
         this.id = id;
-        this.queue = queue;
-        this.mutex = mutex;
-        this.free = free;
-        this.standby = standby;
+        this.buffer = buffer;
+        this.name = name;
     }
 
     @Override
-    public void run() 
-    {
-        System.out.println("Car " + id + " arrived");
-        free.demand(); // attempt to join + modify queue
-        mutex.demand();
-
-        queue.add(this);
-        System.out.println("Car " + id + " entered the queue (Queue size: " + queue.size() + ")");
-
-        mutex.release();
-        standby.release(); // allow a pump to serve
+    public void run() {
+        System.out.println("Car " + this.name + " arrived");
+        buffer.produce(this);
     }
 
-    public int getCarId() {
-        return id;
+    public String get_car_name() {
+        return this.name;
     }
 }
 
 class Pump extends Thread {
     private final int id;
-    private final Queue<Car> cars_queue;
-    private final Semaphore mutex, free, standby, bays;
+    private final BoundedBuffer<Car> buffer;
+    private final Semaphore bays;
 
-    public Pump(int id, Queue<Car> cars_queue, Semaphore mutex, Semaphore free, Semaphore standby, Semaphore bays) {
+    public Pump(int id, BoundedBuffer<Car> buffer, Semaphore bays) {
         this.id = id;
-        this.cars_queue = cars_queue;
-        this.mutex = mutex;
-        this.free = free;
-        this.standby = standby;
+        this.buffer = buffer;
         this.bays = bays;
     }
 
@@ -92,54 +113,71 @@ class Pump extends Thread {
     {
         while (true) 
         {
-            standby.demand(); // attempt to serve + modify queue
-            mutex.demand();
-
-            Car car = cars_queue.poll();
-            System.out.println("Pump " + id + ": Car " + car.getCarId() + " taken for service");
-            mutex.release();
-            free.release(); // allow a new car to join the queue
+            Car car = buffer.consume();
+            System.out.println("Pump " + id + ": Car " + car.get_car_name() + " taken for service " + "(Queue size: " + buffer.get_count() + ")");
 
             bays.demand(); // attempt to occupy a bay
-            System.out.println("Pump " + id + ": Car " + car.getCarId() + " begins service");
+            System.out.println("Pump " + id + ": Car " + car.get_car_name() + " begins service");
             try {
                 Thread.sleep(1500); // service time
             } catch (InterruptedException e) {
 
             }
 
-            System.out.println("Pump " + id + ": Car " + car.getCarId() + " finished service");
+            System.out.println("Pump " + id + ": Car " + car.get_car_name() + " finished service");
             System.out.println("Pump " + id + ": Bay released");
             bays.release(); // allow another pump to occupy the bay
         }
     }
 }
 
-public class ServiceStation {
-    public static void main(String[] args) 
-    {
-        int waitingAreaCapacity = 5;
-        int numPumps = 3;
-        int numCars = 10;
+class BoundedBuffer<T> {
+    private final Object[] buffer;
+    private int in = 0;
+    private int out = 0;
+    private int count = 0;
+    private final int size;
 
-        Queue<Car> cars_queue = new LinkedList<>();
+    private final Semaphore empty;
+    private final Semaphore full;
+    private final Semaphore mutex;
 
-        Semaphore mutex = new Semaphore(1);
-        Semaphore free = new Semaphore(waitingAreaCapacity);
-        Semaphore standby = new Semaphore(0);
-        Semaphore bays = new Semaphore(numPumps);
+    public BoundedBuffer(int size) {
+        this.size = size;
+        buffer = new Object[size];
+        empty = new Semaphore(size);
+        full = new Semaphore(0);
+        mutex = new Semaphore(1);
+    }
 
-        for (int i = 1; i <= numPumps; i++) {
-            new Pump(i, cars_queue, mutex, free, standby, bays).start();
-        }
+    // Insert an item into the buffer
+    public void produce(T item) {
+        empty.demand();
+        mutex.demand();
 
-        for (int i = 1; i <= numCars; i++) {
-            new Car(i, cars_queue, mutex, free, standby).start();
-            try {
-                Thread.sleep(500); // arrival delay
-            } catch (InterruptedException e) {
+        buffer[in] = item;
+        count++;
+        System.out.println("Car " + ((Car) item).get_car_name() + " entered the queue (Queue size: " + count  + ")");
+        in = (in + 1) % size;
 
-            }
-        }
+        mutex.release();
+        full.release();
+    }
+
+    @SuppressWarnings("unchecked")
+    public T consume() {
+        full.demand();
+        mutex.demand();
+        
+        T item = (T) buffer[out];
+        out = (out + 1) % size;
+        count--;
+
+        mutex.release();
+        empty.release();
+        return item;
+    }
+    public int get_count(){
+        return this.count;
     }
 }
