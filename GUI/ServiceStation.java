@@ -184,6 +184,7 @@ class CarWashGUI extends VBox //Pane
 
     private int waitingCapacity;
     private int pumpCount;
+    private final Font font = Font.loadFont(getClass().getResourceAsStream("/fonts/robotoslab.ttf"), 24);
     
     private final Image carImage;
     private final Image pumpIdle;
@@ -202,7 +203,7 @@ class CarWashGUI extends VBox //Pane
         this.pumpCount = pumpCount;
 
         // load images from classpath (GUI/Images/)
-        carImage = new Image(getClass().getResource("Images/car.png").toExternalForm(), 60, 30, true, true);
+        carImage = new Image(getClass().getResource("Images/car.png").toExternalForm(), 200, 30, false, false);
         pumpIdle = new Image(getClass().getResource("Images/pump_idle.png").toExternalForm(), 100, 100, true, true);
         pumpActive = new Image(getClass().getResource("Images/pump_active.png").toExternalForm(), 100, 100, true, true);
         slotImage = new Image(getClass().getResource("Images/slot.png").toExternalForm(), (int)SLOT_W, (int)SLOT_H, true, true);
@@ -222,8 +223,8 @@ class CarWashGUI extends VBox //Pane
         setAlignment(Pos.TOP_CENTER);
 
         // ----------- Title
-        Label title = new Label("🚗 Car Wash Simulation");
-        title.setFont(Font.font("Arial", 22));
+        Label title = new Label("Car Wash Simulation");
+        title.setFont(font);
         title.setTextFill(Color.DARKBLUE);
 
         // -------- animationPane: base layer for moving cars + background
@@ -296,32 +297,33 @@ class CarWashGUI extends VBox //Pane
 
     // create waiting slot nodes and populate grid
     private void createWaitingSlots(int capacity) {
-        waitingSlots.clear();
-        waitingGrid.getChildren().clear();
+    waitingSlots.clear();
+    waitingGrid.getChildren().clear();
 
-        // int rows = (int) Math.ceil((double) capacity / SLOTS_PER_ROW);
-        for (int i = 0; i < capacity; i++) 
-        {
-            StackPane slot = new StackPane();
-            slot.setPrefSize(SLOT_W, SLOT_H);
+    for (int i = 0; i < capacity; i++) {
+        StackPane slot = new StackPane();
+        slot.setPrefSize(SLOT_W, SLOT_H);
 
-            ImageView slotBg = new ImageView(slotImage);
-            slotBg.setFitWidth(SLOT_W);
-            slotBg.setFitHeight(SLOT_H);
+        Label label = new Label("Empty");
+        label.setFont(Font.font(12));
+        label.setTextFill(Color.GRAY);
 
-            Label label = new Label("Empty");
-            label.setFont(Font.font(12));
-            label.setTextFill(Color.GRAY);
+        slot.getChildren().add(label);
+        StackPane.setAlignment(label, Pos.TOP_CENTER);
 
-            slot.getChildren().addAll(slotBg, label);
-            waitingSlots.add(slot);
-            waitingSlotAssignments.add(null); // initialize as empty
+        if ((i + 1) % SLOTS_PER_ROW != 0) {
+            slot.setStyle("-fx-border-color: transparent black transparent transparent; -fx-border-width: 0 2 0 0;");
+        }
 
-            int r = i / SLOTS_PER_ROW;
-            int c = i % SLOTS_PER_ROW;
-            waitingGrid.add(slot, c, r);
+        waitingSlots.add(slot);
+        waitingSlotAssignments.add(null);
+
+        int r = i / SLOTS_PER_ROW;
+        int c = i % SLOTS_PER_ROW;
+        waitingGrid.add(slot, c, r);
         }
     }
+
 
     private void createPumps(int count) {
         pumpBox.getChildren().clear();
@@ -410,7 +412,7 @@ class CarWashGUI extends VBox //Pane
                 for (int i = 0; i < waitingSlots.size(); i++) 
                 {
                     StackPane slot = waitingSlots.get(i);
-                    Label label = (Label) slot.getChildren().get(1);
+                    Label label = (Label) slot.getChildren().get(0);
                     String carAtSlot = waitingSlotAssignments.get(i);
 
                     if(carAtSlot != null) 
@@ -470,26 +472,20 @@ class CarWashGUI extends VBox //Pane
 
             StackPane slot = waitingSlots.get(slotIndex);
 
-            // compute center of slot in animationPane coordinates
+            // car positioning
             Point2D slotCenterScene = slot.localToScene(slot.getWidth() / 2.0, slot.getHeight() / 2.0);
-            Point2D target = animationPane.sceneToLocal(slotCenterScene);
+            Point2D slotCenter = animationPane.sceneToLocal(slotCenterScene);
 
-            // reset any previous translate so we compute absolute translation
-            carView.setTranslateX(0);
-            carView.setTranslateY(0);
-
-            double translateX = target.getX() - carView.getLayoutX();
-            double translateY = target.getY() - carView.getLayoutY();
+            double targetX = slotCenter.getX() - carView.getFitWidth() / 2.0;
+            double targetY = slotCenter.getY() - carView.getFitHeight() / 4.0;
 
             TranslateTransition tt = new TranslateTransition(Duration.seconds(1.2), carView);
-            // use setToX/Y relative to current translate (we reset it to 0)
-            tt.setToX(translateX);
-            tt.setToY(translateY);
+            tt.setToX(targetX - carView.getLayoutX());
+            tt.setToY(targetY - carView.getLayoutY());
 
             tt.setOnFinished(ev -> {
-                // snap to exact slot coords and clear translate to avoid accumulation
-                carView.setLayoutX(target.getX());
-                carView.setLayoutY(target.getY());
+                carView.setLayoutX(targetX);
+                carView.setLayoutY(targetY);
                 carView.setTranslateX(0);
                 carView.setTranslateY(0);
                 carView.toFront();
