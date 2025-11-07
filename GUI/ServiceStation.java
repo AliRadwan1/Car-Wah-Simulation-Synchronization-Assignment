@@ -35,13 +35,27 @@ import javafx.util.Duration;
 
 import java.io.InputStream;
 import java.util.*;
+
+/*
+ * ----------------------------
+ * Car Class
+ * ----------------------------
+ * Represents a single car entering the car wash simulation.
+ * Each car is implemented as a Thread because cars operate independently
+ * and interact with semaphores (synchronization) to access the waiting area
+ * and pumps.
+ */
 class Car extends Thread
 {
-    private String ID;
-    private CarWashGUI gui;
-    private Queue<String> queue;
-    private Semaphore mutex, empty, full;
+    private String ID;                // Unique car identifier (e.g., C0, C1)
+    private CarWashGUI gui;           // Reference to GUI to update visuals
+    private Queue<String> queue;      // Shared queue representing waiting area
+    private Semaphore mutex, empty, full; // Semaphores for synchronization
 
+    /*
+     * Constructor initializes the car with its ID, GUI reference,
+     * shared queue, and semaphores.
+     */
     public Car(String ID, CarWashGUI gui, Queue<String> queue,
                 Semaphore mutex, Semaphore empty, Semaphore full)
     {
@@ -53,22 +67,30 @@ class Car extends Thread
         this.full = full;
     }
 
+    /*
+     * run() method defines car behavior.
+     * Each car:
+     * 1. Appears at entrance
+     * 2. Waits for a free slot in the waiting area
+     * 3. Moves to waiting area
+     * 4. Signals that a car is available for service
+     */
     public void run()
     {
         try {
-            gui.spawnCarAtEntrance(ID);
+            gui.spawnCarAtEntrance(ID); // Show car in GUI entrance
             gui.log(ID + " arrived, waiting for a free slot...");
-            empty.waitS(); // wait until there is space to add car
-            mutex.waitS(); // if the queue (Waiting Area) being in use wait else take mutex
-            
-            queue.add(ID);
-            gui.log(ID + " moving to waiting area");
-            gui.updateWaitingArea(new ArrayList<>(queue));
-            Thread.sleep(2000);
 
-            // checkPaused();
-            full.signal();
-            mutex.signal();
+            empty.waitS(); // Wait if waiting area is full
+            mutex.waitS(); // Lock queue for exclusive access
+
+            queue.add(ID); // Add car to waiting area
+            gui.log(ID + " moving to waiting area");
+            gui.updateWaitingArea(new ArrayList<>(queue)); // Update GUI
+            Thread.sleep(2000); // Optional visual delay
+
+            full.signal(); // Signal pumps that a car is available
+            mutex.signal(); // Release queue lock
         } 
         catch (Exception e) 
         {
@@ -78,13 +100,24 @@ class Car extends Thread
     }
 }
 
+/*
+ * ----------------------------
+ * Pump Class
+ * ----------------------------
+ * Represents a single pump/service bay in the car wash.
+ * Pumps operate as independent threads and process cars from the waiting area.
+ */
 class Pump extends Thread
 {
-    private int pumpID;
-    private CarWashGUI gui;
-    private Queue<String> queue;
-    private Semaphore mutex, empty, full, pumps;
+    private int pumpID;               // Index of this pump
+    private CarWashGUI gui;           // GUI reference for visuals
+    private Queue<String> queue;      // Shared waiting area queue
+    private Semaphore mutex, empty, full, pumps; // Synchronization semaphores
 
+    /*
+     * Constructor initializes pump with its index, GUI, shared queue,
+     * and all relevant semaphores.
+     */
     public Pump(int pumpID, CarWashGUI gui, Queue<String> queue,
                 Semaphore mutex, Semaphore empty, Semaphore full, Semaphore pumps)
     {
@@ -97,28 +130,37 @@ class Pump extends Thread
         this.pumps = pumps;
     }
 
+    /*
+     * run() method continuously:
+     * 1. Waits for a car to be available
+     * 2. Waits for the pump to be free
+     * 3. Locks the queue
+     * 4. Picks a car and updates GUI
+     * 5. Simulates service duration
+     * 6. Releases the pump
+     */
     public void run()
     {
         while (true) {
             try 
             {
-                full.waitS();  // wait until there is cars waiting
-                pumps.waitS(); // wait until ther is a free pump
-                mutex.waitS(); // if the queue (Waiting Area) being in use wait else take mutex
+                full.waitS();  // Wait until a car is available
+                pumps.waitS(); // Wait until this pump is free
+                mutex.waitS(); // Lock the queue
 
-                String car = queue.poll();
+                String car = queue.poll(); // Take the first car
                 gui.log("Pump " + (pumpID + 1) + ": " + car + " begins service");
-                gui.updateWaitingArea(new ArrayList<>(queue));
-                gui.updatePumpStatus(pumpID, car, true);
+                gui.updateWaitingArea(new ArrayList<>(queue)); // Update waiting slots
+                gui.updatePumpStatus(pumpID, car, true);      // Update pump visual
 
-                mutex.signal(); // let go of mutex so other threads can work on the queue
-                empty.signal(); // signal that there is one more space free in waiting area
+                mutex.signal(); // Unlock the queue
+                empty.signal(); // Signal one free space in waiting area
 
-                Thread.sleep(5000); // simulate service duration
+                Thread.sleep(5000); // Simulate washing duration
                 gui.log("Pump " + (pumpID + 1) + ": " + car + " finishes service");
-                gui.updatePumpStatus(pumpID, car, false);
+                gui.updatePumpStatus(pumpID, car, false);     // Update GUI
 
-                pumps.signal();
+                pumps.signal(); // Release pump
             } 
             catch (InterruptedException e)
             {
@@ -128,30 +170,38 @@ class Pump extends Thread
     }
 }
 
+/*
+ * ----------------------------
+ * Semaphore Class
+ * ----------------------------
+ * Implements a simple counting semaphore to control access to shared resources.
+ * waitS() = P() operation
+ * signal() = V() operation
+ */
 class Semaphore
 {
-    private int value;
+    private int value; // Current count
 
     public Semaphore(int value)
     {
         this.value = value;
     }
     
+    // Wait operation: blocks thread if semaphore is 0
     public synchronized void waitS()
     {
         while (value == 0) {
             try {
                 wait();
             } catch (InterruptedException e) {
-                
                 Thread.currentThread().interrupt();
                 return;
             }
         }
         value--;
-
     }
 
+    // Signal operation: increments semaphore and notifies waiting threads
     public synchronized void signal()
     {
         value++;
@@ -159,48 +209,61 @@ class Semaphore
     }
 }
 
-
-class CarWashGUI extends VBox //Pane
+/*
+ * ----------------------------
+ * CarWashGUI Class
+ * ----------------------------
+ * This class creates the graphical interface of the car wash simulation.
+ * - Displays entrance area (animationPane)
+ * - Waiting area slots (GridPane)
+ * - Pumps/service bays (HBox)
+ * - Logging area (TextArea)
+ */
+class CarWashGUI extends VBox //VBox for vertical stacking
 {
-    private Pane animationPane;                 // where cars move
-    private GridPane waitingGrid;               // visual grid (slots inside a ScrollPane)
-    private ScrollPane waitingScroll;
-    private HBox pumpBox;
-    private TextArea logArea;
+    private Pane animationPane;                 // Pane where cars move
+    private GridPane waitingGrid;               // Grid of waiting slots
+    private ScrollPane waitingScroll;           // Scroll for waiting area
+    private HBox pumpBox;                       // HBox containing pumps
+    private TextArea logArea;                   // Text area for logging events
 
-    // private List<ImageView> waitingSpots = new ArrayList<>();
-    private Map<String, ImageView> carMap = new HashMap<>();
-    private List<ImageView> pumpImages = new ArrayList<>();
-    private List<StackPane> waitingSlots = new ArrayList<>();
+    private Map<String, ImageView> carMap = new HashMap<>(); // Map carID -> ImageView
+    private List<ImageView> pumpImages = new ArrayList<>();  // Images for each pump
+    private List<StackPane> waitingSlots = new ArrayList<>();// StackPane for slot visuals
 
-    // Maps slot index → carId (or null)
-    private final List<String> waitingSlotAssignments = new ArrayList<>();
+    private final List<String> waitingSlotAssignments = new ArrayList<>(); // carID per slot
 
-    private int waitingCapacity;
-    private int pumpCount;
-    private final String fontPath = "/fonts/robotoslab.ttf";
-    
+    private int waitingCapacity; // Total slots in waiting area
+    private int pumpCount;       // Total pumps
+    private final String fontPath = "/fonts/robotoslab.ttf"; // Custom font
+
+    // Images
     private final Image carImage;
     private final Image pumpIdle;
     private final Image pumpActive;
     private final Image slotImage;
-    private final Image backgroundImage; // optional
+    private final Image backgroundImage; // Optional background
 
-    private final int SLOTS_PER_ROW = 5;
-    private final int VISIBLE_ROWS = 3;     // 3 x 5 = 15 visible slots
-    private final double SLOT_W = 120;
-    private final double SLOT_H = 70;
+    private final int SLOTS_PER_ROW = 5;  // Max slots per row in waiting grid
+    private final int VISIBLE_ROWS = 3;   // Number of rows visible at once
+    private final double SLOT_W = 120;    // Width of a slot
+    private final double SLOT_H = 70;     // Height of a slot
 
+    /*
+     * Constructor sets up GUI: loads images, creates waiting slots, pumps,
+     * log area, and back button.
+     */
     public CarWashGUI(int waitingCapacity, int pumpCount)
     {
         this.waitingCapacity = waitingCapacity;
         this.pumpCount = pumpCount;
 
-        // load images from classpath (GUI/Images/)
+        // Load car and pump images
         carImage = new Image(getClass().getResource("Images/car.png").toExternalForm(), 200, 30, false, false);
         pumpIdle = new Image(getClass().getResource("Images/pump_idle.png").toExternalForm(), 100, 100, true, true);
         pumpActive = new Image(getClass().getResource("Images/pump_active.png").toExternalForm(), 100, 100, true, true);
         slotImage = new Image(getClass().getResource("Images/slot.png").toExternalForm(), (int)SLOT_W, (int)SLOT_H, true, true);
+
         Image tmpBg;
         try 
         {
@@ -212,7 +275,7 @@ class CarWashGUI extends VBox //Pane
         }
         backgroundImage = tmpBg;
 
-        setSpacing(12);
+        setSpacing(12); // vertical spacing between components
         setPadding(new Insets(12));
         setAlignment(Pos.TOP_CENTER);
 
@@ -262,13 +325,14 @@ class CarWashGUI extends VBox //Pane
         pumpBox = new HBox(30);
         pumpBox.setAlignment(Pos.CENTER);
         createPumps(pumpCount);
+
         Label pumpLabel = new Label("Service Bays");
         pumpLabel.setFont(Font.loadFont(getClass().getResourceAsStream(fontPath), 24));
         VBox pumpBoxWithLabel = new VBox(6, pumpLabel, pumpBox);
         pumpBoxWithLabel.setAlignment(Pos.CENTER);
-        VBox.setMargin(pumpBoxWithLabel, new Insets(-40, 0, 0, 0));  // top 10 px
+        VBox.setMargin(pumpBoxWithLabel, new Insets(-40, 0, 0, 0));
         VBox.setMargin(pumpLabel, new Insets(0, 0, 10, 0));
-        VBox.setMargin(title, new Insets(25, 0, -50, 0)); // move it 4px closer to next item
+        VBox.setMargin(title, new Insets(25, 0, -50, 0));
 
         // -------- log
         logArea = new TextArea();
@@ -292,10 +356,12 @@ class CarWashGUI extends VBox //Pane
         getChildren().addAll(title, waitingVisualPane, pumpBoxWithLabel, logArea, controls);
     }
 
-    // create waiting slot nodes and populate grid
+    // -----------------------
+    // Creates waiting area slots as StackPanes with labels
     private void createWaitingSlots(int capacity) {
         waitingSlots.clear();
         waitingGrid.getChildren().clear();
+        waitingSlotAssignments.clear();
 
         for (int i = 0; i < capacity; i++) {
             StackPane slot = new StackPane();
@@ -321,7 +387,8 @@ class CarWashGUI extends VBox //Pane
         }
     }
 
-
+    // -----------------------
+    // Create pump ImageViews
     private void createPumps(int count) {
         pumpBox.getChildren().clear();
         pumpImages.clear();
@@ -349,7 +416,6 @@ class CarWashGUI extends VBox //Pane
             () -> {
                 ImageView pumpView = pumpImages.get(pumpIndex);
                 if (occupied) {
-                    // pumpView.setImage(pumpActive);
                     freeWatingSlot(carId);
                     moveCarToPump(carId, pumpIndex);
                 } else {
@@ -373,9 +439,7 @@ class CarWashGUI extends VBox //Pane
     public void updateWaitingArea(List<String> cars) {
         Platform.runLater(
             () -> {
-                // Set<String> newWaitingCars = new HashSet<>(cars);
-
-                // Remove cars that left the waiting area (now at pump)               
+                // Remove cars that left the waiting area
                 for (int i = 0; i < waitingSlotAssignments.size(); i++) 
                 {
                     String carAtSlot = waitingSlotAssignments.get(i);
@@ -392,7 +456,6 @@ class CarWashGUI extends VBox //Pane
                     boolean alreadyAssigned = waitingSlotAssignments.contains(carID);
                     if (!alreadyAssigned) 
                     {
-                        // find first empty slot
                         for (int i = 0; i < waitingSlotAssignments.size(); i++) 
                         {
                             if (waitingSlotAssignments.get(i) == null) 
@@ -453,145 +516,176 @@ class CarWashGUI extends VBox //Pane
             carView.toFront();
         });
     }
-    // move a newly arrived car onto its slot index
+
+    // ----------------------------
+    // Animations for Car movements in CarWashGUI
+    // ----------------------------
+
     private void moveCarToWaiting(String carId, int slotIndex) 
     {
+        // Get the ImageView object representing the car from the map using carId
         ImageView carView = carMap.get(carId);
+
+        // If car is not found in the map, print an error and exit method
         if (carView == null) 
         {
             System.err.println("Error: Car " + carId + " not found in map to move!");
             return;
         }
 
-        // Add to pane and animate to slot after layout pass
+        // Run the animation code on JavaFX Application Thread to update GUI safely
         Platform.runLater(() -> {
-            carView.toFront();
+            carView.toFront();             // Bring car to front so it is visible above other elements
+            animationPane.applyCss();      // Apply CSS updates (needed to recalculate layout)
+            animationPane.layout();        // Recalculate layout positions
 
-            // ensure layout pass to have correct slot coordinates
-            animationPane.applyCss();
-            animationPane.layout();
-
+            // Get the waiting slot StackPane at the given index
             StackPane slot = waitingSlots.get(slotIndex);
 
-            // car positioning
+            // Compute the center position of the slot in scene coordinates
             Point2D slotCenterScene = slot.localToScene(slot.getWidth() / 2.0, slot.getHeight() / 2.0);
+            // Convert scene coordinates to local coordinates of animationPane
             Point2D slotCenter = animationPane.sceneToLocal(slotCenterScene);
 
+            // Calculate target X and Y for car, centering car in slot
             double targetX = slotCenter.getX() - carView.getFitWidth() / 2.0;
             double targetY = slotCenter.getY() - carView.getFitHeight() / 4.0;
 
+            // Create a smooth translation animation for car to move to the slot
             TranslateTransition tt = new TranslateTransition(Duration.seconds(1.2), carView);
-            tt.setToX(targetX - carView.getLayoutX());
-            tt.setToY(targetY - carView.getLayoutY());
+            tt.setToX(targetX - carView.getLayoutX());  // Relative X movement
+            tt.setToY(targetY - carView.getLayoutY());  // Relative Y movement
 
+            // When animation finishes, snap car exactly to target position and reset translations
             tt.setOnFinished(ev -> {
                 carView.setLayoutX(targetX);
                 carView.setLayoutY(targetY);
                 carView.setTranslateX(0);
                 carView.setTranslateY(0);
-                carView.toFront();
+                carView.toFront(); // Ensure car remains on top after move
             });
-            tt.play();
+
+            tt.play(); // Start the animation
         });
     }
-    
-    // ---------- Animation: Move car to pump ----------d
-    // move car to pump area (center in front of pump)
+
+    // ----------------------------
+    // Animation: Move car to pump
+    // ----------------------------
     private void moveCarToPump(String carId, int pumpIndex) 
     {
+        // Get the car ImageView
         ImageView carView = carMap.get(carId);
+
+        // If car is missing (rare case), create a new ImageView and add to animationPane
         if (carView == null) 
         {
-            // if missing (rare), create and fade in near pump
-            carView = new ImageView(carImage);
-            carView.setFitWidth(60);
-            carView.setFitHeight(30);
-            carMap.put(carId, carView);
-            animationPane.getChildren().add(carView);
-            carView.toFront();
+            carView = new ImageView(carImage);  // Default car image
+            carView.setFitWidth(60);            // Set car width
+            carView.setFitHeight(30);           // Set car height
+            carMap.put(carId, carView);         // Add to map
+            animationPane.getChildren().add(carView); // Add to pane for display
+            carView.toFront();                  // Bring to front
         }
 
-        // make a final copy for lambda use
+        // Make a final copy of carView for use inside lambda expression
         final ImageView carFinal = carView;
 
+        // Run animation safely on JavaFX thread
         Platform.runLater(() -> {
-            ImageView pumpView = pumpImages.get(pumpIndex);
+            ImageView pumpView = pumpImages.get(pumpIndex); // Get pump ImageView
+            // Find center position of pump in scene coordinates
             Point2D pumpCenterScene = pumpView.localToScene(
                     pumpView.getBoundsInLocal().getWidth() / 2.0,
                     pumpView.getBoundsInLocal().getHeight() / 2.0
             );
+            // Convert pump center to animationPane coordinates
             Point2D pumpCenterInAnim = animationPane.sceneToLocal(pumpCenterScene);
 
-            // choose a target slightly in front of pump (lower Y)
+            // Set target position slightly in front of pump (offset Y by 10 pixels)
             double targetX = pumpCenterInAnim.getX();
-            double targetY = pumpCenterInAnim.getY() + 10; // adjust to appear in front of pump
+            double targetY = pumpCenterInAnim.getY() + 10; // Position in front of pump
 
+            // Compute relative movement
             double dx = targetX - carFinal.getLayoutX();
             double dy = targetY - carFinal.getLayoutY();
 
+            // Create smooth translation animation to pump
             TranslateTransition tt = new TranslateTransition(Duration.seconds(1.5), carFinal);
             tt.setByX(dx);
             tt.setByY(dy);
             tt.setOnFinished(ev -> {
-                // snap to pump spot
+                // Snap car exactly to pump spot after animation
                 carFinal.setLayoutX(targetX);
                 carFinal.setLayoutY(targetY);
                 carFinal.setTranslateX(0);
                 carFinal.setTranslateY(0);
 
+                // Change pump image to active state to indicate usage
                 pumpView.setImage(pumpActive);
             });
-            tt.play();
+            tt.play(); // Start the animation
         });
     }
 
-    // animate car leaving
+    // ----------------------------
+    // Animation: Car leaving simulation
+    // ----------------------------
     private void moveCarOut(String carId) 
     {
+        // Remove car from map
         ImageView carView = carMap.remove(carId);
-        if (carView == null) return;
+        if (carView == null) return; // Exit if car does not exist
 
         Platform.runLater(() -> {
-            // move to right off-screen (x = animationPane.width + 200)
-            double targetX = animationPane.getWidth() + 300;
+            // Move car to right off-screen with slight upward offset
+            double targetX = animationPane.getWidth() + 300; // Offscreen X
             double dx = targetX - carView.getLayoutX();
-            double dy = -60; // a little upward as it leaves
+            double dy = -60; // Slight upward movement
 
+            // Create translation animation
             TranslateTransition tt = new TranslateTransition(Duration.seconds(2.0), carView);
             tt.setByX(dx);
             tt.setByY(dy);
-            tt.setOnFinished(ev -> animationPane.getChildren().remove(carView));
-            // carView.toFront();
+            tt.setOnFinished(ev -> animationPane.getChildren().remove(carView)); // Remove car after leaving
             tt.play();
         });
     }
 }
-
+// ----------------------------
+// ServiceStation Class (Main)
+// ----------------------------
+// Main JavaFX application class managing start menu, input dialogs, and simulation initialization
 public class ServiceStation extends Application
 {
-    private static CarWashGUI gui;
-    private Stage mainStage;
+    private static CarWashGUI gui; // Reference to GUI for simulation display
+    private Stage mainStage;       // Primary stage for the application
 
     public ServiceStation()
     {
-        super();
+        super(); // Call JavaFX Application constructor
     }
     
-    // ----------- Alert Helper -----------
+    // ----------------------------
+    // Helper method to show information alert
+    // ----------------------------
     private void showAlert(String message) {
         Platform.runLater(() -> {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Notice");
             alert.setHeaderText(null);
             alert.setContentText(message);
-            alert.showAndWait();
+            alert.showAndWait(); // Display modal alert
         });
     }
 
+    // ----------------------------
+    // Static method to restart main menu
+    // ----------------------------
     public static void showMainMenuAgain() {
         Platform.runLater(() -> {
             try {
-                new ServiceStation().start(new Stage());
+                new ServiceStation().start(new Stage()); // Open a new stage with main menu
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -601,11 +695,11 @@ public class ServiceStation extends Application
     @Override
     public void start(Stage stage)
     {
-        // default values are Waiting_capcity (5) & Pump number (3)
-        
-        this.mainStage = stage;
-        // ------------ Start Menu
-        // Background Image
+        this.mainStage = stage; // Store reference to primary stage
+
+        // ----------------------------
+        // Setup Start Menu GUI
+        // ----------------------------
         Image backgroundImage = new Image(getClass().getResource("Images/menu_bg2.png").toExternalForm());
 
         BackgroundImage bgImg = new BackgroundImage(
@@ -617,14 +711,18 @@ public class ServiceStation extends Application
         );
 
         StackPane root = new StackPane();
-        root.setBackground(new Background(bgImg));
+        root.setBackground(new Background(bgImg)); // Set menu background image
 
-        // ------------- Start Button
+        // ----------------------------
+        // Start Button
+        // ----------------------------
         Button startBtn = new Button("▶ Start Simulation");
         startBtn.setStyle(
             "-fx-background-color: #ffffff; -fx-text-fill: #2196F3; -fx-font-size: 16px; " +
             "-fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 10px 20px;"
         );
+
+        // Change style on hover for visual feedback
         startBtn.hoverProperty().addListener(
             (obs, oldVal, newVal) -> {
                 if (newVal) {
@@ -640,11 +738,16 @@ public class ServiceStation extends Application
                 }
             }
         );
-        // ------------- Exit Button
+
+        // ----------------------------
+        // Exit Button
+        // ----------------------------
         Button exitBtn = new Button("Exit");
         exitBtn.setStyle(
             "-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-size: 14px; -fx-background-radius: 8px;"
         );
+
+        // Hover effect for Exit button
         exitBtn.hoverProperty().addListener(
             (obs, oldVal, newVal) -> {
                 if (newVal) {
@@ -658,9 +761,11 @@ public class ServiceStation extends Application
                 }
             }
         );
-        exitBtn.setOnAction(e -> Platform.exit());        
+        exitBtn.setOnAction(e -> Platform.exit()); // Close application when clicked
 
-        // ------------- Credits Section
+        // ----------------------------
+        // Credits Section
+        // ----------------------------
         Label credits = new Label(
             "Created by: AI Section 5 — Team Project\n" +
             "Team Members:\n" +
@@ -680,7 +785,9 @@ public class ServiceStation extends Application
         );
         credits.setAlignment(Pos.CENTER);
 
-        // ---- Fade-In Animation for Credits ----
+        // ----------------------------
+        // Fade-In Animation for Credits
+        // ----------------------------
         FadeTransition fadeIn = new FadeTransition(javafx.util.Duration.seconds(3.5), credits);
         fadeIn.setFromValue(0.0);
         fadeIn.setToValue(1.0);
@@ -688,6 +795,9 @@ public class ServiceStation extends Application
         fadeIn.setAutoReverse(true);
         fadeIn.play();
 
+        // ----------------------------
+        // Layout: Menu choices
+        // ----------------------------
         Separator line = new Separator();
         line.setStyle("-fx-background-color: white; -fx-opacity: 0.3;");
         line.setPrefWidth(400);
@@ -696,48 +806,49 @@ public class ServiceStation extends Application
         menuChoices.setAlignment(Pos.CENTER_LEFT);
         menuChoices.setPadding(new Insets(20));
         menuChoices.setPrefWidth(300);
-        menuChoices.setTranslateY(200); // move down a bit from center for better layout
+        menuChoices.setTranslateY(200);
 
         StackPane menuLayout = new StackPane(menuChoices);
         menuLayout.setAlignment(Pos.CENTER);
         menuLayout.setPadding(new Insets(30));
         root.getChildren().add(menuLayout);
-        
+
         Scene menuScene = new Scene(root, 610, 607);
         stage.setTitle("Car Wash Simulation");
         stage.setScene(menuScene);
         stage.show();
 
-        // When Start button is clicked
+        // Open simulation input dialog when Start button clicked
         startBtn.setOnAction(e -> showInputDialog(root));
     }
 
-    // ----------- Input Dialog -----------
+    // ----------------------------
+    // Input dialog for simulation settings
+    // ----------------------------
     private void showInputDialog(StackPane root)
     {
+        // Header label
         Label header = new Label("Simulation Settings");
         header.setFont(Font.font("Arial", 20));
         header.setTextFill(Color.WHITE);
 
-        // waiting area slider
+        // Waiting area slider
         Label waitingLabel = new Label("Waiting Area Capacity: 5");
         waitingLabel.setTextFill(Color.WHITE);
         waitingLabel.setFont(Font.font("Arial", 14));
         waitingLabel.setPrefWidth(220);
 
-        Slider waitingSlider = new Slider(1, 10, 5); // (min, max, default)
+        Slider waitingSlider = new Slider(1, 10, 5);
         waitingSlider.setSnapToTicks(true);
         waitingSlider.setMajorTickUnit(5);
         waitingSlider.setMinorTickCount(4);
         waitingSlider.setBlockIncrement(1);
         waitingSlider.setMaxWidth(220);
-
-        // label update
         waitingSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
             waitingLabel.setText("Waiting Area Capacity: " + newVal.intValue());
         });
 
-        // pumps slider
+        // Pumps slider
         Label pumpLabel = new Label("Number of Pumps: 3");
         pumpLabel.setTextFill(Color.WHITE);
         pumpLabel.setFont(Font.font("Arial", 14));
@@ -748,12 +859,11 @@ public class ServiceStation extends Application
         pumpSlider.setMajorTickUnit(1);
         pumpSlider.setBlockIncrement(1);
         pumpSlider.setMaxWidth(220);
-
         pumpSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
             pumpLabel.setText("Number of Pumps: " + newVal.intValue());
         });
 
-        // cars text field
+        // Cars input field
         TextField carField = new TextField();
         carField.setPromptText("Enter number of cars (default 10)");
         carField.setStyle(
@@ -764,13 +874,13 @@ public class ServiceStation extends Application
             "-fx-border-radius: 5;" +
             "-fx-background-radius: 5;"
         );
-
         carField.setMaxWidth(220);
 
-        // Buttons
+        // Buttons: Start / Cancel
         HBox buttons = new HBox(15);
         buttons.setAlignment(Pos.CENTER);
 
+        // Start simulation button
         Button startSimBtn = new Button("Start");
         startSimBtn.setStyle(
             "-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14px; " +
@@ -792,6 +902,7 @@ public class ServiceStation extends Application
             }
         );
 
+        // Cancel button
         Button cancelBtn = new Button("Cancel");
         cancelBtn.setStyle(
             "-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-size: 14px; " +
@@ -813,9 +924,9 @@ public class ServiceStation extends Application
             }
         );
 
-        buttons.getChildren().addAll(startSimBtn,cancelBtn);
-        
-        // dialog update
+        buttons.getChildren().addAll(startSimBtn, cancelBtn);
+
+        // Dialog layout
         VBox dialogContent = new VBox(10, header, waitingLabel, waitingSlider, pumpLabel, pumpSlider, carField, buttons);
         dialogContent.setAlignment(Pos.CENTER);
         dialogContent.setPadding(new Insets(20));
@@ -830,14 +941,15 @@ public class ServiceStation extends Application
         );
         dialogBox.setPadding(new Insets(30));
 
-        root.getChildren().add(dialogBox);
+        root.getChildren().add(dialogBox); // Add dialog to main menu
 
+        // Cancel button closes dialog
         cancelBtn.setOnAction(e -> root.getChildren().remove(dialogBox));
 
-        // start sim
+        // Start button reads inputs and starts simulation
         startSimBtn.setOnAction(
             e ->{
-                int waiting = 5, pumps = 3, cars = 10;
+                int waiting = 5, pumps = 3, cars = 10; // default values
 
                 waiting = (int) waitingSlider.getValue();
                 pumps = (int) pumpSlider.getValue();
@@ -846,7 +958,7 @@ public class ServiceStation extends Application
                 {
                     if (!carField.getText().trim().isEmpty())
                     {
-                        cars = Math.max(1, Integer.parseInt(carField.getText().trim()));
+                        cars = Math.max(1, Integer.parseInt(carField.getText().trim())); // Ensure at least 1 car
                     }
                 } 
                 catch (NumberFormatException ex) 
@@ -854,35 +966,43 @@ public class ServiceStation extends Application
                     showAlert("Invalid car count! Using default (10).");
                 }
 
-                root.getChildren().remove(dialogBox);
-                startSimulation(waiting, pumps, cars);
+                root.getChildren().remove(dialogBox); // Remove dialog after input
+                startSimulation(waiting, pumps, cars); // Start simulation
             }
         );
     }
 
+    // ----------------------------
+    // Initializes semaphores and threads for simulation
+    // ----------------------------
     private void runSimulation(int waitingCapacity, int pumpCount, int carCount)
     {
         try 
         {
-            Thread.sleep(500); // slight delay for GUI render
+            Thread.sleep(500); // slight delay for GUI rendering
+
+            // Semaphore for mutual exclusion
             Semaphore mutex = new Semaphore(1);
+            // Semaphore representing empty slots in waiting area
             Semaphore empty = new Semaphore(waitingCapacity);
+            // Semaphore representing full slots (cars waiting)
             Semaphore full = new Semaphore(0);
+            // Semaphore representing available pumps
             Semaphore pumps = new Semaphore(pumpCount);
 
-            Queue<String> queue = new LinkedList<>();
-            
-            // Start Pump Threads
+            Queue<String> queue = new LinkedList<>(); // Shared queue for waiting cars
+
+            // Start threads for each pump
             for (int i = 0; i < pumpCount; i++) 
             {
                 new Pump(i, gui, queue, mutex, empty, full, pumps).start();
             }
 
-            // Start Car Threads
+            // Start threads for each car
             for (int i = 0; i < carCount; i++) 
             {
                 new Car("C" + i, gui, queue, mutex, empty, full).start();
-                Thread.sleep(1500);
+                Thread.sleep(1500); // Stagger car arrivals
             }
         } 
         catch (Exception e) 
@@ -891,19 +1011,21 @@ public class ServiceStation extends Application
         }
     }
 
+    // ----------------------------
+    // Create GUI and start simulation threads
+    // ----------------------------
     private void startSimulation(int waitingCapacity, int pumpCount, int carCount)
     {
-        // Create the simulation GUI inside the SAME stage
-        gui = new CarWashGUI(waitingCapacity, pumpCount);
+        gui = new CarWashGUI(waitingCapacity, pumpCount); // Initialize simulation GUI
 
-        Scene simScene = new Scene(gui, 800, 600);
-        mainStage.setScene(simScene);
+        Scene simScene = new Scene(gui, 800, 600); // Create scene
+        mainStage.setScene(simScene); // Set scene to main stage
 
-        new Thread(() -> runSimulation(waitingCapacity, pumpCount, carCount)).start();
+        new Thread(() -> runSimulation(waitingCapacity, pumpCount, carCount)).start(); // Start simulation in separate thread
     }
 
     public static void main(String[] args)
     {
-        launch(args);
+        launch(args); // Launch JavaFX application
     }
 }
