@@ -59,13 +59,15 @@ class Car extends Thread
     public void run()
     {
         try {
+            gui.spawnCarAtEntrance(ID);
+            gui.log(ID + " arrived, waiting for a free slot...");
             // checkPaused();
             empty.waitS(); // wait until there is space to add car
             // checkPaused();
             mutex.waitS(); // if the queue (Waiting Area) being in use wait else take mutex
             
             queue.add(ID);
-            gui.log(ID + " entered waiting area");
+            gui.log(ID + " moving to waiting area");
             gui.updateWaitingArea(new ArrayList<>(queue));
             Thread.sleep(2000);
 
@@ -177,7 +179,6 @@ class CarWashGUI extends VBox //Pane
     private Map<String, ImageView> carMap = new HashMap<>();
     private List<ImageView> pumpImages = new ArrayList<>();
     private List<StackPane> waitingSlots = new ArrayList<>();
-    private final Set<String> currentWaitingCars = Collections.synchronizedSet(new HashSet<>());
 
     // Maps slot index → carId (or null)
     private final List<String> waitingSlotAssignments = new ArrayList<>();
@@ -436,34 +437,43 @@ class CarWashGUI extends VBox //Pane
     }
 
     // ================= Animation helpers =================
+    public void spawnCarAtEntrance(String carId) {
+        Platform.runLater(() -> {
+            if (carMap.containsKey(carId)) {
+                return; // Already spawned
+            }
+            
+            // Create the car view
+            ImageView carView = new ImageView(carImage);
+            carView.setFitWidth(60);
+            carView.setFitHeight(30);
+            ColorAdjust colorAdjust = new ColorAdjust();
+            
+            // a random hue for each car
+            double randomHue = Math.random() * 2.0 - 1.0;
+            colorAdjust.setHue(randomHue);
+            carView.setEffect(colorAdjust);
 
+            // car positioning
+            carView.setLayoutX(-5); 
+            carView.setLayoutY(Math.random() * (animationPane.getHeight() - carView.getFitHeight()));
+            carMap.put(carId, carView);
+            animationPane.getChildren().add(carView);
+            carView.toFront();
+        });
+    }
     // move a newly arrived car onto its slot index
     private void moveCarToWaiting(String carId, int slotIndex) 
     {
-        if (carMap.containsKey(carId)) 
+        ImageView carView = carMap.get(carId);
+        if (carView == null) 
         {
-            // already exists — just return
+            System.err.println("Error: Car " + carId + " not found in map to move!");
             return;
         }
-        // create view
-        ImageView carView = new ImageView(carImage);
-        carView.setFitWidth(60);
-        carView.setFitHeight(30);
-
-        // small random tint for variety
-        carView.setEffect(new ColorAdjust(0, 0, Math.random() * 0.35 - 0.175, 0));
-
-        // place off-screen left as start
-        carView.setLayoutX(-120);
-        carView.setLayoutY(animationPane.getHeight() / 2.0 - 20);
-
-        // put into maps immediately so updateWaitingArea won't create a duplicate
-        carMap.put(carId, carView);
-        currentWaitingCars.add(carId);  // mark as present in waiting area
 
         // Add to pane and animate to slot after layout pass
         Platform.runLater(() -> {
-            animationPane.getChildren().add(carView);
             carView.toFront();
 
             // ensure layout pass to have correct slot coordinates
