@@ -1,3 +1,22 @@
+/*
+* Group Members:
+* Ali Radwan Farouk    20231110
+* Adel Hefny           20230198
+* Ziad Salama          20230150
+* Mohamed Mahmoud      20230354
+* Asser Ahmed          20230655
+* 
+* Section: AI S5
+* Submission to TA: Mena Asfour
+*/
+
+/*
+ * Compile command
+ * & "D:\Downloads\java\openjdk-25+36_windows-x64_bin\jdk-25\bin\javac.exe" "--module-path" "C:\javafx-sdk-25.0.1\lib" "--add-modules" "javafx.controls,javafx.fxml" "ServiceStation.java"
+ * Run Command
+ * & "D:\Downloads\java\openjdk-25+36_windows-x64_bin\jdk-25\bin\java.exe" "--enable-native-access=javafx.graphics" "--module-path" "C:\javafx-sdk-25.0.1\lib" "--add-modules" "javafx.controls,javafx.fxml" "ServiceStation"
+ */
+
 import javafx.geometry.*;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -14,7 +33,6 @@ import javafx.stage.*;
 import javafx.application.Platform;
 import javafx.util.Duration;
 
-// import java.time.Duration;
 import java.util.*;
 
 
@@ -161,6 +179,9 @@ class CarWashGUI extends VBox //Pane
     private List<StackPane> waitingSlots = new ArrayList<>();
     private final Set<String> currentWaitingCars = Collections.synchronizedSet(new HashSet<>());
 
+    // Maps slot index → carId (or null)
+    private final List<String> waitingSlotAssignments = new ArrayList<>();
+
     private int waitingCapacity;
     private int pumpCount;
     
@@ -278,18 +299,23 @@ class CarWashGUI extends VBox //Pane
         waitingSlots.clear();
         waitingGrid.getChildren().clear();
 
-        int rows = (int) Math.ceil((double) capacity / SLOTS_PER_ROW);
-        for (int i = 0; i < capacity; i++) {
+        // int rows = (int) Math.ceil((double) capacity / SLOTS_PER_ROW);
+        for (int i = 0; i < capacity; i++) 
+        {
             StackPane slot = new StackPane();
             slot.setPrefSize(SLOT_W, SLOT_H);
+
             ImageView slotBg = new ImageView(slotImage);
             slotBg.setFitWidth(SLOT_W);
             slotBg.setFitHeight(SLOT_H);
+
             Label label = new Label("Empty");
             label.setFont(Font.font(12));
             label.setTextFill(Color.GRAY);
+
             slot.getChildren().addAll(slotBg, label);
             waitingSlots.add(slot);
+            waitingSlotAssignments.add(null); // initialize as empty
 
             int r = i / SLOTS_PER_ROW;
             int c = i % SLOTS_PER_ROW;
@@ -324,7 +350,8 @@ class CarWashGUI extends VBox //Pane
             () -> {
                 ImageView pumpView = pumpImages.get(pumpIndex);
                 if (occupied) {
-                    pumpView.setImage(pumpActive);
+                    // pumpView.setImage(pumpActive);
+                    freeWatingSlot(carId);
                     moveCarToPump(carId, pumpIndex);
                 } else {
                     pumpView.setImage(pumpIdle);
@@ -333,35 +360,63 @@ class CarWashGUI extends VBox //Pane
             }
         );
     }
+    
+    private void freeWatingSlot(String carId)
+    {
+        int index = waitingSlotAssignments.indexOf(carId);
+        if (index != -1)
+        {
+            waitingSlotAssignments.set(index, null);
+        }
+    }
 
     // update waiting area labels and animate new cars into the grid
     public void updateWaitingArea(List<String> cars) {
         Platform.runLater(
             () -> {
-                Set<String> newWaitingCars = new HashSet<>(cars);
+                // Set<String> newWaitingCars = new HashSet<>(cars);
 
-                for (String carID : newWaitingCars) 
+                // Remove cars that left the waiting area (now at pump)               
+                for (int i = 0; i < waitingSlotAssignments.size(); i++) 
                 {
-                    if (!currentWaitingCars.contains(carID)) 
+                    String carAtSlot = waitingSlotAssignments.get(i);
+                    if (carAtSlot != null && !cars.contains(carAtSlot)) 
                     {
-                        int slotIndex = cars.indexOf(carID);
-                        moveCarToWaiting(carID, slotIndex);
+                        // car has left the waiting area
+                        waitingSlotAssignments.set(i, null);
                     }
                 }
 
-                // Remove cars that left the waiting area (now at pump)
-                currentWaitingCars.removeIf(id -> !newWaitingCars.contains(id));
+                // Add new cars to empty slots
+                for (String carID : cars) 
+                {
+                    boolean alreadyAssigned = waitingSlotAssignments.contains(carID);
+                    if (!alreadyAssigned) 
+                    {
+                        // find first empty slot
+                        for (int i = 0; i < waitingSlotAssignments.size(); i++) 
+                        {
+                            if (waitingSlotAssignments.get(i) == null) 
+                            {
+                                waitingSlotAssignments.set(i, carID);
+                                moveCarToWaiting(carID, i);
+                                break;
+                            }
+                        }
+                    }
+                }
 
+                // Update slot labels
                 for (int i = 0; i < waitingSlots.size(); i++) 
                 {
                     StackPane slot = waitingSlots.get(i);
                     Label label = (Label) slot.getChildren().get(1);
-                    if (i < cars.size()) 
+                    String carAtSlot = waitingSlotAssignments.get(i);
+
+                    if(carAtSlot != null) 
                     {
-                        String carId = cars.get(i);
-                        label.setText(carId);
+                        label.setText(carAtSlot);
                         label.setTextFill(Color.BLACK);
-                        if (!carMap.containsKey(carId)) moveCarToWaiting(carId, i);
                     } 
                     else 
                     {
@@ -383,6 +438,11 @@ class CarWashGUI extends VBox //Pane
     // move a newly arrived car onto its slot index
     private void moveCarToWaiting(String carId, int slotIndex) 
     {
+        if (carMap.containsKey(carId)) 
+        {
+            // already exists — just return
+            return;
+        }
         // create view
         ImageView carView = new ImageView(carImage);
         carView.setFitWidth(60);
@@ -395,30 +455,39 @@ class CarWashGUI extends VBox //Pane
         carView.setLayoutX(-120);
         carView.setLayoutY(animationPane.getHeight() / 2.0 - 20);
 
+        // put into maps immediately so updateWaitingArea won't create a duplicate
         carMap.put(carId, carView);
         currentWaitingCars.add(carId);  // mark as present in waiting area
 
+        // Add to pane and animate to slot after layout pass
         Platform.runLater(() -> {
             animationPane.getChildren().add(carView);
             carView.toFront();
-        });
 
-        // compute target coordinates (slot's center) in animationPane coordinate space
-        Platform.runLater(() -> {
-            // ensure layout pass has occurred
+            // ensure layout pass to have correct slot coordinates
+            animationPane.applyCss();
+            animationPane.layout();
+
             StackPane slot = waitingSlots.get(slotIndex);
+
+            // compute center of slot in animationPane coordinates
             Point2D slotCenterScene = slot.localToScene(slot.getWidth() / 2.0, slot.getHeight() / 2.0);
             Point2D target = animationPane.sceneToLocal(slotCenterScene);
 
-            // compute translation distances (we use translate because layoutX already set)
-            double dx = target.getX() - carView.getLayoutX();
-            double dy = target.getY() - carView.getLayoutY();
+            // reset any previous translate so we compute absolute translation
+            carView.setTranslateX(0);
+            carView.setTranslateY(0);
+
+            double translateX = target.getX() - carView.getLayoutX();
+            double translateY = target.getY() - carView.getLayoutY();
 
             TranslateTransition tt = new TranslateTransition(Duration.seconds(1.2), carView);
-            tt.setByX(dx);
-            tt.setByY(dy);
+            // use setToX/Y relative to current translate (we reset it to 0)
+            tt.setToX(translateX);
+            tt.setToY(translateY);
+
             tt.setOnFinished(ev -> {
-                // snap to exact slot coords to avoid cumulative translate issues
+                // snap to exact slot coords and clear translate to avoid accumulation
                 carView.setLayoutX(target.getX());
                 carView.setLayoutY(target.getY());
                 carView.setTranslateX(0);
@@ -463,7 +532,7 @@ class CarWashGUI extends VBox //Pane
             double dx = targetX - carFinal.getLayoutX();
             double dy = targetY - carFinal.getLayoutY();
 
-            TranslateTransition tt = new TranslateTransition(Duration.seconds(1.8), carFinal);
+            TranslateTransition tt = new TranslateTransition(Duration.seconds(1.5), carFinal);
             tt.setByX(dx);
             tt.setByY(dy);
             tt.setOnFinished(ev -> {
@@ -472,6 +541,8 @@ class CarWashGUI extends VBox //Pane
                 carFinal.setLayoutY(targetY);
                 carFinal.setTranslateX(0);
                 carFinal.setTranslateY(0);
+
+                pumpView.setImage(pumpActive);
             });
             tt.play();
         });
@@ -647,7 +718,7 @@ public class ServiceStation extends Application
             }
 
             // Start Car Threads
-            for (int i = 0; i < 30; i++) 
+            for (int i = 0; i < 10; i++) 
             {
                 new Car("C" + i, gui, queue, mutex, empty, full).start();
                 Thread.sleep(1500);
