@@ -34,10 +34,6 @@ import javafx.stage.*;
 import javafx.util.Duration;
 
 import java.util.*;
-
-
-
-
 class Car extends Thread
 {
     private String ID;
@@ -61,9 +57,7 @@ class Car extends Thread
         try {
             gui.spawnCarAtEntrance(ID);
             gui.log(ID + " arrived, waiting for a free slot...");
-            // checkPaused();
             empty.waitS(); // wait until there is space to add car
-            // checkPaused();
             mutex.waitS(); // if the queue (Waiting Area) being in use wait else take mutex
             
             queue.add(ID);
@@ -107,7 +101,6 @@ class Pump extends Thread
         while (true) {
             try 
             {
-                // checkPaused();
                 full.waitS();  // wait until there is cars waiting
                 pumps.waitS(); // wait until ther is a free pump
                 mutex.waitS(); // if the queue (Waiting Area) being in use wait else take mutex
@@ -120,7 +113,6 @@ class Pump extends Thread
                 mutex.signal(); // let go of mutex so other threads can work on the queue
                 empty.signal(); // signal that there is one more space free in waiting area
 
-                // checkPaused();
                 Thread.sleep(5000); // simulate service duration
                 gui.log("Pump " + (pumpID + 1) + ": " + car + " finishes service");
                 gui.updatePumpStatus(pumpID, car, false);
@@ -169,7 +161,7 @@ class Semaphore
 
 class CarWashGUI extends VBox //Pane
 {
-    private Pane animationPane; // where cars move
+    private Pane animationPane;                 // where cars move
     private GridPane waitingGrid;               // visual grid (slots inside a ScrollPane)
     private ScrollPane waitingScroll;
     private HBox pumpBox;
@@ -298,30 +290,30 @@ class CarWashGUI extends VBox //Pane
 
     // create waiting slot nodes and populate grid
     private void createWaitingSlots(int capacity) {
-    waitingSlots.clear();
-    waitingGrid.getChildren().clear();
+        waitingSlots.clear();
+        waitingGrid.getChildren().clear();
 
-    for (int i = 0; i < capacity; i++) {
-        StackPane slot = new StackPane();
-        slot.setPrefSize(SLOT_W, SLOT_H);
+        for (int i = 0; i < capacity; i++) {
+            StackPane slot = new StackPane();
+            slot.setPrefSize(SLOT_W, SLOT_H);
 
-        Label label = new Label("Empty");
-        label.setFont(Font.font(12));
-        label.setTextFill(Color.GRAY);
+            Label label = new Label("Empty");
+            label.setFont(Font.font(12));
+            label.setTextFill(Color.GRAY);
 
-        slot.getChildren().add(label);
-        StackPane.setAlignment(label, Pos.TOP_CENTER);
+            slot.getChildren().add(label);
+            StackPane.setAlignment(label, Pos.TOP_CENTER);
 
-        if ((i + 1) % SLOTS_PER_ROW != 0) {
-            slot.setStyle("-fx-border-color: transparent black transparent transparent; -fx-border-width: 0 2 0 0;");
-        }
+            if ((i + 1) % SLOTS_PER_ROW != 0) {
+                slot.setStyle("-fx-border-color: transparent black transparent transparent; -fx-border-width: 0 2 0 0;");
+            }
 
-        waitingSlots.add(slot);
-        waitingSlotAssignments.add(null);
+            waitingSlots.add(slot);
+            waitingSlotAssignments.add(null);
 
-        int r = i / SLOTS_PER_ROW;
-        int c = i % SLOTS_PER_ROW;
-        waitingGrid.add(slot, c, r);
+            int r = i / SLOTS_PER_ROW;
+            int c = i % SLOTS_PER_ROW;
+            waitingGrid.add(slot, c, r);
         }
     }
 
