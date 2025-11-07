@@ -427,11 +427,6 @@ class CarWashGUI extends VBox //Pane
                         label.setTextFill(Color.GRAY);
                     }
                 }
-
-                // ✅ make sure all cars are drawn above slots
-                for (ImageView carView : carMap.values()) {
-                    carView.toFront();
-                }
             }
         );
     }
@@ -728,29 +723,41 @@ public class ServiceStation extends Application
         header.setFont(Font.font("Arial", 20));
         header.setTextFill(Color.WHITE);
 
-        // Input Fields
-        TextField waitingField = new TextField();
-        waitingField.setPromptText("Enter waiting area capacity (default 5)");
-        waitingField.setStyle(
-            "-fx-background-color: #272a2bff;" +
-            "-fx-text-fill: white;" +
-            "-fx-prompt-text-fill: #bbbbbb;" +
-            "-fx-border-color: #555555;" +
-            "-fx-border-radius: 5;" +
-            "-fx-background-radius: 5;"
-        );
+        // waiting area slider
+        Label waitingLabel = new Label("Waiting Area Capacity: 5");
+        waitingLabel.setTextFill(Color.WHITE);
+        waitingLabel.setFont(Font.font("Arial", 14));
+        waitingLabel.setPrefWidth(220);
 
-        TextField pumpField = new TextField();
-        pumpField.setPromptText("Enter number of pumps (default 3)");
-        pumpField.setStyle(
-            "-fx-background-color: #272a2bff;" +
-            "-fx-text-fill: white;" +
-            "-fx-prompt-text-fill: #bbbbbb;" +
-            "-fx-border-color: #555555;" +
-            "-fx-border-radius: 5;" +
-            "-fx-background-radius: 5;"
-        );
+        Slider waitingSlider = new Slider(1, 10, 5); // (min, max, default)
+        waitingSlider.setSnapToTicks(true);
+        waitingSlider.setMajorTickUnit(5);
+        waitingSlider.setMinorTickCount(4);
+        waitingSlider.setBlockIncrement(1);
+        waitingSlider.setMaxWidth(220);
 
+        // label update
+        waitingSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            waitingLabel.setText("Waiting Area Capacity: " + newVal.intValue());
+        });
+
+        // pumps slider
+        Label pumpLabel = new Label("Number of Pumps: 3");
+        pumpLabel.setTextFill(Color.WHITE);
+        pumpLabel.setFont(Font.font("Arial", 14));
+        pumpLabel.setPrefWidth(220);
+
+        Slider pumpSlider = new Slider(1, 5, 3);
+        pumpSlider.setSnapToTicks(true);
+        pumpSlider.setMajorTickUnit(1);
+        pumpSlider.setBlockIncrement(1);
+        pumpSlider.setMaxWidth(220);
+
+        pumpSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            pumpLabel.setText("Number of Pumps: " + newVal.intValue());
+        });
+
+        // cars text field
         TextField carField = new TextField();
         carField.setPromptText("Enter number of cars (default 10)");
         carField.setStyle(
@@ -762,8 +769,6 @@ public class ServiceStation extends Application
             "-fx-background-radius: 5;"
         );
 
-        waitingField.setMaxWidth(220);
-        pumpField.setMaxWidth(220);
         carField.setMaxWidth(220);
 
         // Buttons
@@ -813,7 +818,9 @@ public class ServiceStation extends Application
         );
 
         buttons.getChildren().addAll(startSimBtn,cancelBtn);
-        VBox dialogContent = new VBox(10, header, waitingField, pumpField, carField, buttons);
+        
+        // dialog update
+        VBox dialogContent = new VBox(10, header, waitingLabel, waitingSlider, pumpLabel, pumpSlider, carField, buttons);
         dialogContent.setAlignment(Pos.CENTER);
         dialogContent.setPadding(new Insets(20));
         dialogContent.setPrefWidth(300);
@@ -831,29 +838,24 @@ public class ServiceStation extends Application
 
         cancelBtn.setOnAction(e -> root.getChildren().remove(dialogBox));
 
+        // start sim
         startSimBtn.setOnAction(
             e ->{
                 int waiting = 5, pumps = 3, cars = 10;
 
+                waiting = (int) waitingSlider.getValue();
+                pumps = (int) pumpSlider.getValue();
+
                 try 
                 {
-                    if (!waitingField.getText().trim().isEmpty())
-                    {
-                        waiting = Math.max(1, Integer.parseInt(waitingField.getText().trim()));
-                    }
-                    if (!pumpField.getText().trim().isEmpty())
-                    {
-                        pumps = Math.max(1, Integer.parseInt(pumpField.getText().trim()));
-                    }
                     if (!carField.getText().trim().isEmpty())
                     {
                         cars = Math.max(1, Integer.parseInt(carField.getText().trim()));
-                
                     }
                 } 
                 catch (NumberFormatException ex) 
                 {
-                    showAlert("Invalid input! Using defaults (5, 3, 10).");
+                    showAlert("Invalid car count! Using default (10).");
                 }
 
                 root.getChildren().remove(dialogBox);
