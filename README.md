@@ -1,104 +1,215 @@
-# Car Wash Simulation
+# 🚗 Car Wash Simulation
 
-## Project Description
+![Java](https://img.shields.io/badge/Java-25-blue?logo=openjdk&logoColor=white)
+![JavaFX](https://img.shields.io/badge/JavaFX-25-8A2BE2?logo=javafx&logoColor=white)
+![Course](https://img.shields.io/badge/CS241-Operating_Systems_1-orange)
+![License](https://img.shields.io/badge/License-Academic-blueviolet)
 
-This project is a Java-based simulation of a car wash and gas station, built to solve a classic concurrency challenge the Producer-Consumer Problem. The goal is to manage a shared, limited set of resources (service bays and waiting spots) without causing race conditions or deadlocks.
+---
 
-In this simulation, Cars (Producers) continuously arrive at the station seeking service. Theay must first enter a waiting area (a bounded bufferqueue) of a fixed size. If the queue is full, the car must wait.
+## 📖 Overview
+This project is a **Java 25 simulation** of a **Car Wash and Gas Station**, built to model the **Producer–Consumer Problem** using **custom semaphores and mutexes**.  
+It demonstrates synchronization and safe concurrent access to shared resources in multithreaded environments.
 
-The Pumps (Consumers) represent the service bays. A pump can only service a car if there is one waiting in the queue and if a service bay is free. The entire process is managed using custom-built semaphores and mutexes to ensure that
+- **Cars (Producers)** continuously arrive seeking service.  
+- **Pumps (Consumers)** represent service bays working in parallel.  
+- Synchronization ensures cars wait when the queue is full and pumps operate only when cars are available.
 
- Only one thread (car or pump) modifies the waiting queue at a time.
- Cars don't try to enter a full queue.
- Pumps don't try to service cars from an empty queue.
- The number of cars being serviced never exceeds the number of available pumps.
+---
 
-## Implementation Details
+## 🧩 Repository Structure
+```
+Car-Wash-Simulation/
+│
+├── GUI/
+│   └── ServiceStation.java        # JavaFX 25 GUI version with animations
+│
+├── GUI_TXT/
+│   └── ServiceStation.java        # JavaFX 25 GUI version (text-based, no animations)
+│
+├── src/
+│   └── ServiceStation.java        # Console version (terminal-based)
+│
+├── .gitignore
+└── README.md
+```
 
-The simulation is built in Java and uses custom-built `Semaphore` objects to manage concurrency.
+🧠 **Note:**  
+Each version includes **only one file named `ServiceStation.java`** (as required by the assignment).  
+All synchronization logic (Semaphores, Cars, Pumps) is contained in that file.
 
-### Core Java Classes
+---
 
-1.  `ServiceStation` (Main Class)
-     Initializes all shared resources the bounded buffer (Queue), Mutex for the queue, and Semaphores (`Empty`, `Full`, `Pumps`).
-     Takes user input for waiting area capacity and the number of service bays.
-     Creates and starts the thread pool for `Pump` (Consumers).
-     Creates and starts a continuous stream of `Car` (Producer) threads.
+## 🧠 Concept & Objective
+The project applies **Operating-Systems synchronization** principles—particularly the **Bounded Buffer pattern**—to simulate limited waiting space and concurrent servicing.
 
-2.  `Car` (Producer)
-     Implements `Runnable`.
-     Represents a car arriving at the station.
-     Interacts with the `Empty` and `Full` semaphores and the `Mutex` to safely add itself to the waiting queue.
+It ensures:
+- Cars cannot enter a full waiting area.  
+- Pumps only serve cars when available.  
+- Only one thread modifies the queue at a time.  
+- The number of serviced cars never exceeds the number of pumps.
 
-3.  `Pump` (Consumer)
-     Implements `Runnable`.
-     Represents a service bay.
-     Interacts with the `Empty`, `Full`, and `Pumps` semaphores, as well as the `Mutex`.
-     Waits for a car to be in the queue (`Full`).
-     Waits for a service bay to be available (`Pumps`).
-     Removes the car from the queue, services it, and then releases the service bay.
+---
 
-4.  `Semaphore`
-     A custom implementation of a counting semaphore with `wait()` (P) and `signal()` (V) operations.
+## ⚙️ Implementation Details
 
-## How to Run
+### 🧱 `ServiceStation` (Main Controller)
+Initializes shared resources (`Queue`, `Mutex`, `Empty`, `Full`, `Pumps` semaphores), reads user input, and launches producer and consumer threads.
 
-1.  Compile all `.java` files.
-2.  Run the `ServiceStation` class
-    ```bash
-    java ServiceStation
-    ```
-3.  The program will prompt you to enter
-     The capacity of the waiting area (queue).
-     The number of available service bays (pumps).
+### 🚗 `Car` (Producer)
+- Represents an arriving car.  
+- Waits if the queue is full (`Empty.wait()`).  
+- Adds itself safely under mutex protection.  
+- Signals a pump that a car is available (`Full.signal()`).
 
-## Output
+### ⛽ `Pump` (Consumer)
+- Waits for available cars (`Full.wait()`) and bays (`Pumps.wait()`).  
+- Removes a car, services it, and releases the bay.
 
-The console will log all system activities, showing the state of each car and pump.
+### 🔒 `Semaphore`
+Custom counting semaphore with `wait()` (P) and `signal()` (V), preventing race conditions and ensuring proper synchronization.
 
-### Sample Output
+---
 
-Input
- Waiting area capacity 5
- Number of service bays (pumps) 3
+## 🖥️ Versions & Execution
 
-Log Sequence
+### 🧾 Console Version — `src/ServiceStation.java`
+Run from terminal:
+
+```bash
+cd src
+javac ServiceStation.java
+java ServiceStation
+```
+
+**Example Input**
+```
+Enter waiting area capacity: 5
+Enter number of service bays: 3
+```
+
+**Example Output**
+```
+C1 arrived
+C2 arrived
+C3 arrived
+Pump 1: C1 occupied
+Pump 2: C2 occupied
+Pump 3: C3 occupied
+C4 arrived and waiting
+C5 arrived and waiting
+Pump 1: C1 finishes service
+Pump 1: Bay 1 is now free
+Pump 1: C4 begins service
+Pump 2: C5 begins service
+All cars processed; simulation ends
+```
+
+---
+
+### 🎨 GUI Version — `GUI/ServiceStation.java`
+- **JavaFX 25 animated** version showing cars moving between waiting areas and pumps.  
+- Real-time visual updates for car movement and pump usage.
+
+**Run**
+1. Open the folder in VS Code or IntelliJ with JavaFX configured.  
+2. Run `ServiceStation.java` inside the `GUI` folder.
+
+---
+
+### 💬 Text-Based GUI Version — `GUI_TXT/ServiceStation.java`
+- Simplified **JavaFX 25** version with textual logs only (no animations).  
+- Useful for lightweight visualization.
+
+**Run**
+1. Open in your IDE with JavaFX configured.  
+2. Run `ServiceStation.java` inside the `GUI_TXT` folder.
+
+---
+
+## 🧭 Getting Started — JavaFX 25 Setup in VS Code
+
+### 🪜 Step 1: Install Required Extensions
+1. Open VS Code.  
+2. Go to **Extensions (Ctrl + Shift + X)**.  
+3. Install:
+   - ✅ **Extension Pack for Java** (Microsoft)  
+   - ✅ *Optional:* **JavaFX Support**
+
+---
+
+### 🪜 Step 2: Download JavaFX 25 SDK
+1. Visit [https://openjfx.io](https://openjfx.io).  
+2. Download **JavaFX 25 SDK** for your OS.  
+3. Extract it, e.g.:
    ```
-   C1 arrived
-   C2 arrived
-   C3 arrived
-   C4 arrived
-   Pump 1 C1 Occupied
-   Pump 2 C2 Occupied
-   Pump 3 C3 Occupied
-   C4 arrived and waiting
-   C5 arrived
-   C5 arrived and waiting
-   Pump 1 C1 login
-   Pump 1 C1 begins service at Bay 1
-   Pump 2 C2 login
-   Pump 2 C2 begins service at Bay 2
-   Pump 3 C3 login
-   Pump 3 C3 begins service at Bay 3
-   Pump 1 C1 finishes service
-   Pump 1 Bay 1 is now free
-   Pump 2 C2 finishes service
-   Pump 2 Bay 2 is now free
-   Pump 1 C4 login
-   Pump 1 C4 begins service at Bay 1
-   Pump 3 C3 finishes service
-   Pump 3 Bay 3 is now free
-   Pump 2 C5 login
-   Pump 2 C5 begins service at Bay 2
-   Pump 1 C4 finishes service
-   Pump 1 Bay 1 is now free
-   Pump 3 C3 finishes service
-   Pump 3 Bay 3 is now free
-   Pump 2 C5 finishes service
-   Pump 2 Bay 2 is now free
-   All cars processed; simulation ends
+   C:\javafx-sdk-25\
    ```
 
-## Acknowledgements
-This project was completed as an assignment for the CS241 Operating System - 1 course at the Faculty of Computers and Artificial Intelligence, Cairo University.
+---
 
+### 🪜 Step 3: Configure VS Code Launch Settings
+Add VM arguments to include JavaFX libraries.
+
+#### For Windows
+```
+--module-path "C:\javafx-sdk-25\lib" --add-modules javafx.controls,javafx.fxml
+```
+
+#### For macOS/Linux
+```
+--module-path "/path/to/javafx-sdk-25/lib" --add-modules javafx.controls,javafx.fxml
+```
+
+#### Example `.vscode/launch.json`
+```json
+{
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Run GUI (JavaFX 25)",
+      "request": "launch",
+      "mainClass": "ServiceStation",
+      "vmArgs": "--module-path \"C:\\javafx-sdk-25\\lib\" --add-modules javafx.controls,javafx.fxml"
+    }
+  ]
+}
+```
+
+---
+
+### 🪜 Step 4: Run
+- Open `GUI/ServiceStation.java` or `GUI_TXT/ServiceStation.java`.  
+- Click **Run ▶️** in VS Code.  
+- The JavaFX 25 window will launch showing the simulation.
+
+---
+
+## 🧰 Technologies Used
+- **Java 25**
+- **JavaFX 25**
+- **Multithreading & Concurrency**
+- **Custom Semaphores & Mutexes**
+- **Producer–Consumer (Bounded Buffer)**
+
+---
+
+## 🧑‍💻 Contributors
+
+| Name | Student ID |
+|------|-------------|
+| Ali Radwan Farouk | 20231110 |
+| Adel Hefny | 20230198 |
+| Ziad Salama | 20230150 |
+| Mohamed Mahmoud | 20230354 |
+| Asser Ahmed | 20230655 |
+
+**Section:** AI S5  
+**Course:** CS241 – Operating Systems 1  
+**Faculty:** Computers and Artificial Intelligence, Cairo University
+
+---
+
+## 🏁 Acknowledgements
+Developed for **CS241 Operating Systems (Synchronization Assignment)** under **TA Mena Asfour**.  
+Demonstrates **thread synchronization** and **bounded-buffer concurrency** using **Java 25** and **JavaFX 25**.
