@@ -2,7 +2,6 @@
 * Group Members:
 * Ali Radwan Farouk    20231110
 * Adel Hefny           20230198
-* Ziad Salama          20230150
 * Mohamed Mahmoud      20230354
 * Asser Ahmed          20230655
 * 
@@ -768,7 +767,7 @@ public class ServiceStation extends Application
         Label credits = new Label(
             "Created by: AI Section 5 — Team Project\n" +
             "Team Members:\n" +
-            "Ali Radwan • Adel Hefny • Ziad Salama • Mohamed Mahmoud • Asser Ahmed"
+            "Ali Radwan • Adel Hefny • Mohamed Mahmoud • Asser Ahmed"
         );
         credits.setFont(Font.font("Arial", 13));
         credits.setTextFill(Color.WHITE);

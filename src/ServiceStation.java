@@ -2,7 +2,6 @@
 * Group Members:
 * Ali Radwan Farouk    20231110
 * Adel Hefny           20230198
-* Ziad Salama          20230150
 * Mohamed Mahmoud      20230354
 * Asser Ahmed          20230655
 * 
@@ -36,6 +35,8 @@ public class ServiceStation {
         // Clean input (remove spaces) and split into an array of car names
         car_names = input.replaceAll(" ", "").split(","); 
         cars_size = car_names.length;
+
+        scanner.close();
     }
 
     public static void main(String[] args) {
